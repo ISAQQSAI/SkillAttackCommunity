@@ -18,6 +18,7 @@ const dictionaries = {
         "Half-open community for submitted vulnerability reports, reviewer verification, and public-safe case publication.",
       nav: {
         home: "Home",
+        skills: "Skill Vault",
         showcase: "Showcase",
         findings: "Findings",
         leaderboards: "Leaderboards",
@@ -183,7 +184,7 @@ const dictionaries = {
       unknownError: "Something went wrong.",
     },
     reviewQueue: {
-      accessRequired: "Reviewer or admin access is required to open the triage queue.",
+      accessRequired: "Admin access is required to open the triage queue.",
       title: "Reviewer queue",
       body:
         "Triage report submissions, inspect parsed artifacts, manage redaction flags, and publish reviewer-verified cases.",
@@ -198,7 +199,7 @@ const dictionaries = {
       duplicates: "duplicates",
     },
     reviewDetail: {
-      accessRequired: "Reviewer or admin access is required.",
+      accessRequired: "Admin access is required.",
       reporter: "Reporter",
       skill: "Skill",
       models: "Models",
@@ -315,6 +316,7 @@ const dictionaries = {
       tagline: "一个半开放的漏洞报告社区，用于提交审计后的漏洞报告、验证证据并发布可公开的标准化案例页。",
       nav: {
         home: "首页",
+        skills: "Skill 库",
         showcase: "展示",
         findings: "案例",
         leaderboards: "排行榜",
@@ -472,7 +474,7 @@ const dictionaries = {
       unknownError: "发生了未知错误。",
     },
     reviewQueue: {
-      accessRequired: "需要审核员或管理员权限才能打开审核队列。",
+      accessRequired: "只有管理员才能打开审核队列。",
       title: "审核队列",
       body: "对报告进行分诊、检查已解析 artifacts、管理脱敏标记，并发布审核通过的公开案例。",
       placeholders: {
@@ -486,7 +488,7 @@ const dictionaries = {
       duplicates: "重复候选",
     },
     reviewDetail: {
-      accessRequired: "需要审核员或管理员权限。",
+      accessRequired: "只有管理员才能查看这个页面。",
       reporter: "提交者",
       skill: "Skill",
       models: "模型",

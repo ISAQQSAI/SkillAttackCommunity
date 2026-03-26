@@ -9,7 +9,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const viewer = await requireRole(["reviewer", "admin"]);
+    const viewer = await requireRole(["admin"]);
     const finding = await unpublishFinding(id, viewer);
     return NextResponse.json({ finding });
   } catch (error) {

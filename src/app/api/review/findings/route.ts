@@ -5,7 +5,7 @@ import { listReviewFindings } from "@/lib/server/store";
 
 export async function GET(request: Request) {
   try {
-    await requireRole(["reviewer", "admin"]);
+    await requireRole(["admin"]);
     const { searchParams } = new URL(request.url);
     const findings = await listReviewFindings({
       status: searchParams.get("status") || undefined,

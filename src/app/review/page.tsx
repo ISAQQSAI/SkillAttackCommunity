@@ -21,7 +21,7 @@ export default async function ReviewPage({
   const locale = await getLocale();
   const dict = getDictionary(locale);
   const viewer = await getViewer();
-  if (!viewer || (viewer.role !== "reviewer" && viewer.role !== "admin")) {
+  if (!viewer || viewer.role !== "admin") {
     return (
       <div className="rounded-[2rem] border border-dashed border-black/15 bg-white/80 p-10 text-sm text-slate-600">
         {dict.reviewQueue.accessRequired}

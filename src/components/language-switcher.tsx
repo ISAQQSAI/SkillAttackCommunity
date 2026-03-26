@@ -29,7 +29,6 @@ export function LanguageSwitcher({ locale }: { locale: Locale }) {
 
   return (
     <div className="flex items-center gap-2 rounded-full border border-black/10 bg-white px-2 py-2 text-xs">
-      <span className="px-2 uppercase tracking-[0.18em] text-slate-500">{dict.shell.language}</span>
       {(["en", "zh"] as const).map((item) => {
         const label = item === "en" ? dict.shell.localeEn : dict.shell.localeZh;
         return (

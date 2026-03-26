@@ -9,7 +9,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const viewer = await requireRole(["reviewer", "admin"]);
+    const viewer = await requireRole(["admin"]);
     const payload = await request.json();
     const finding = await transitionFindingStatus(id, viewer, payload);
     return NextResponse.json({ finding });

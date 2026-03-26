@@ -18,6 +18,7 @@ const dictionaries = {
         "Half-open community for submitted vulnerability reports, reviewer verification, and public-safe case publication.",
       nav: {
         home: "Home",
+        showcase: "Showcase",
         findings: "Findings",
         leaderboards: "Leaderboards",
         datasets: "Datasets",
@@ -314,6 +315,7 @@ const dictionaries = {
       tagline: "一个半开放的漏洞报告社区，用于提交审计后的漏洞报告、验证证据并发布可公开的标准化案例页。",
       nav: {
         home: "首页",
+        showcase: "展示",
         findings: "案例",
         leaderboards: "排行榜",
         datasets: "数据集",

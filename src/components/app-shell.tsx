@@ -20,6 +20,7 @@ export function AppShell({ children, viewer, backendMode, githubEnabled, locale,
   const dict = getDictionary(locale);
   const nav = [
     { href: "/", label: dict.shell.nav.home },
+    { href: "/showcase", label: dict.shell.nav.showcase },
     { href: "/findings", label: dict.shell.nav.findings },
     { href: "/leaderboards", label: dict.shell.nav.leaderboards },
     { href: "/datasets", label: dict.shell.nav.datasets },

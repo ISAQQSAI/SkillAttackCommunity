@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  reporter
+  reviewer
+  admin
+}
+
+enum FindingStatus {
+  draft
+  submitted
+  needs_info
+  triaged
+  duplicate
+  redaction_required
+  reviewer_verified
+  published
+  rejected
+}
+
+enum SnapshotScope {
+  home
+  leaderboard
+  dataset
+  model
+}
+
+enum JobType {
+  parse_artifact_bundle
+  suggest_duplicates
+  build_public_case_payload
+  refresh_public_aggregates
+}
+
+enum JobStatus {
+  queued
+  running
+  done
+  failed
+}
+
+model User {
+  id         String          @id @default(cuid())
+  githubId   String?         @unique
+  githubLogin String?        @unique
+  name       String
+  email      String?
+  image      String?
+  role       UserRole        @default(reporter)
+  visibility Json?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  findings   FindingReport[] @relation("ReporterFindings")
+  reviews    ReviewRecord[]  @relation("ReviewerRecords")
+}
+
+model FindingReport {
+  id                  String           @id @default(cuid())
+  status              FindingStatus    @default(draft)
+  reporterId          String
+  title               String
+  summary             String
+  skillName           String
+  skillUrl            String
+  vendor              String
+  skillVersion        String?
+  datasetTag          String
+  modelTags           Json
+  vulnType            String
+  severityClaim       String
+  attackPrompt        String
+  expectedRisk        String
+  reproSteps          String
+  observedResult      String
+  smokingGun          String
+  externalReferences  Json
+  publicSafe          Boolean          @default(false)
+  submittedAt         DateTime?
+  verificationSummary String?
+  duplicateOfId       String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  reporter            User             @relation("ReporterFindings", fields: [reporterId], references: [id])
+  duplicateOf         FindingReport?   @relation("FindingDuplicates", fields: [duplicateOfId], references: [id])
+  duplicates          FindingReport[]  @relation("FindingDuplicates")
+  artifactBundle      ArtifactBundle?
+  reviewRecords       ReviewRecord[]
+  publishedFinding    PublishedFinding?
+}
+
+model ArtifactBundle {
+  id               String        @id @default(cuid())
+  findingId        String        @unique
+  rawUploadLocation String
+  parsedManifest   Json
+  detectedFiles    Json
+  extractedMetadata Json
+  redactionFlags   Json
+  artifacts        Json
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  finding          FindingReport @relation(fields: [findingId], references: [id])
+}
+
+model ReviewRecord {
+  id                 String         @id @default(cuid())
+  findingId          String
+  reviewerId         String
+  statusBefore       FindingStatus?
+  statusAfter        FindingStatus
+  reviewerNotes      String?
+  redactionNotes     String?
+  duplicateTargetId  String?
+  verificationSummary String?
+  createdAt          DateTime       @default(now())
+
+  finding            FindingReport  @relation(fields: [findingId], references: [id])
+  reviewer           User           @relation("ReviewerRecords", fields: [reviewerId], references: [id])
+}
+
+model PublishedFinding {
+  id                 String         @id @default(cuid())
+  findingId          String         @unique
+  slug               String         @unique
+  publicTitle        String
+  publicSummary      String
+  publicEvidenceBlocks Json
+  publicArtifactLinks Json
+  verificationBadge  String
+  verdict            String?
+  publishedAt        DateTime       @default(now())
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  finding            FindingReport  @relation(fields: [findingId], references: [id])
+}
+
+model AggregateSnapshot {
+  id         String        @id @default(cuid())
+  scope      SnapshotScope
+  key        String
+  payload    Json
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([scope, key])
+}
+
+model Job {
+  id         String      @id @default(cuid())
+  type       JobType
+  status     JobStatus   @default(queued)
+  payload    Json
+  attempts   Int         @default(0)
+  lastError  String?
+  runAfter   DateTime?
+  lockedAt   DateTime?
+  lockedBy   String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}

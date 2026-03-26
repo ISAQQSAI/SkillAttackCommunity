@@ -1,4 +1,5 @@
 import type { FindingStatus } from "@/lib/community";
+import { translateStatus, type Locale } from "@/lib/i18n";
 
 const tone: Record<FindingStatus, string> = {
   draft: "bg-slate-100 text-slate-700",
@@ -12,10 +13,10 @@ const tone: Record<FindingStatus, string> = {
   rejected: "bg-red-100 text-red-700",
 };
 
-export function StatusBadge({ status }: { status: FindingStatus }) {
+export function StatusBadge({ status, locale = "en" }: { status: FindingStatus; locale?: Locale }) {
   return (
     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${tone[status]}`}>
-      {status.replaceAll("_", " ")}
+      {translateStatus(status, locale)}
     </span>
   );
 }

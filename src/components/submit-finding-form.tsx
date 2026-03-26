@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 
 import type { FindingReport } from "@/lib/community";
+import { getDictionary, translateStatus, type Locale } from "@/lib/i18n";
 
 const severityOptions = ["low", "medium", "high", "critical"];
 const datasetOptions = ["community", "obvious", "contextual", "hot100"];
@@ -13,14 +14,16 @@ type SubmitAction = "save" | "submit";
 
 interface SubmitFindingFormProps {
   initialFinding?: FindingReport;
+  locale: Locale;
 }
 
-export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
+export function SubmitFindingForm({ initialFinding, locale }: SubmitFindingFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
   const [working, setWorking] = useState<SubmitAction | null>(null);
   const [message, setMessage] = useState<string>("");
   const [currentId, setCurrentId] = useState<string>(initialFinding?.id || "");
+  const dict = getDictionary(locale);
   const accept = useMemo(
     () =>
       [
@@ -74,7 +77,7 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
       });
       const draftJson = await draftResponse.json();
       if (!draftResponse.ok) {
-        throw new Error(draftJson.error || "Could not save the report.");
+        throw new Error(draftJson.error || dict.submitForm.saveError);
       }
 
       const findingId = draftJson.finding.id as string;
@@ -95,7 +98,7 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
         });
         const uploadJson = await uploadResponse.json();
         if (!uploadResponse.ok) {
-          throw new Error(uploadJson.error || "Could not upload artifacts.");
+          throw new Error(uploadJson.error || dict.submitForm.uploadError);
         }
       }
 
@@ -103,18 +106,18 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
         const submitResponse = await fetch(`/api/findings/${findingId}/submit`, { method: "POST" });
         const submitJson = await submitResponse.json();
         if (!submitResponse.ok) {
-          throw new Error(submitJson.error || "Could not submit the report.");
+          throw new Error(submitJson.error || dict.submitForm.submitError);
         }
-        setMessage("Finding submitted for review.");
+        setMessage(dict.submitForm.submittedMessage);
         router.push(`/reports/${findingId}`);
         router.refresh();
         return;
       }
 
-      setMessage("Draft saved. You can keep editing or submit for review.");
+      setMessage(dict.submitForm.savedMessage);
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Something went wrong.");
+      setMessage(error instanceof Error ? error.message : dict.submitForm.unknownError);
     } finally {
       setWorking(null);
     }
@@ -123,14 +126,14 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
   return (
     <div className="grid gap-6">
       <div className="rounded-3xl border border-black/10 bg-white/85 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <h2 className="text-2xl font-semibold tracking-tight">Submit a finding report</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">{dict.submitForm.title}</h2>
         <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
-          This community collects already-audited vulnerability reports, not raw skills. Submit the report narrative,
-          attach public-safe artifacts, and send it into reviewer triage.
+          {dict.submitForm.intro}
         </p>
         {initialFinding ? (
           <div className="mt-4 rounded-2xl border border-black/10 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            Editing existing report <strong>{initialFinding.id}</strong> in status <strong>{initialFinding.status}</strong>.
+            {dict.submitForm.editingPrefix} <strong>{initialFinding.id}</strong> {dict.submitForm.editingStatus}{" "}
+            <strong>{translateStatus(initialFinding.status, locale)}</strong>.
           </div>
         ) : null}
       </div>
@@ -139,19 +142,19 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
         <input type="hidden" name="id" defaultValue={initialFinding?.id || ""} />
 
         <section className="grid gap-4">
-          <h3 className="text-lg font-semibold">Public case framing</h3>
+          <h3 className="text-lg font-semibold">{dict.submitForm.framing}</h3>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="grid gap-2 text-sm">
-              Public title draft
+              {dict.submitForm.labels.publicTitle}
               <input
                 name="title"
                 className="rounded-2xl border border-black/10 px-4 py-3"
-                placeholder="Short public-safe title"
+                placeholder={dict.submitForm.placeholders.publicTitle}
                 defaultValue={initialFinding?.title || ""}
               />
             </label>
             <label className="grid gap-2 text-sm">
-              Severity claim
+              {dict.submitForm.labels.severity}
               <select
                 name="severityClaim"
                 defaultValue={initialFinding?.severityClaim || "medium"}
@@ -166,37 +169,37 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
             </label>
           </div>
           <label className="grid gap-2 text-sm">
-            Short summary
+            {dict.submitForm.labels.summary}
             <textarea
               name="summary"
               className="min-h-28 rounded-2xl border border-black/10 px-4 py-3"
-              placeholder="One paragraph that explains the issue in public-safe language"
+              placeholder={dict.submitForm.placeholders.summary}
               defaultValue={initialFinding?.summary || ""}
             />
           </label>
         </section>
 
         <section className="grid gap-4">
-          <h3 className="text-lg font-semibold">Affected skill metadata</h3>
+          <h3 className="text-lg font-semibold">{dict.submitForm.affected}</h3>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="grid gap-2 text-sm">
-              Skill name
+              {dict.submitForm.labels.skillName}
               <input name="skillName" className="rounded-2xl border border-black/10 px-4 py-3" defaultValue={initialFinding?.skillName || ""} />
             </label>
             <label className="grid gap-2 text-sm">
-              Skill URL / repo URL / marketplace URL
+              {dict.submitForm.labels.skillUrl}
               <input name="skillUrl" className="rounded-2xl border border-black/10 px-4 py-3" defaultValue={initialFinding?.skillUrl || ""} />
             </label>
             <label className="grid gap-2 text-sm">
-              Vendor / maintainer
+              {dict.submitForm.labels.vendor}
               <input name="vendor" className="rounded-2xl border border-black/10 px-4 py-3" defaultValue={initialFinding?.vendor || ""} />
             </label>
             <label className="grid gap-2 text-sm">
-              Version / commit / release tag
+              {dict.submitForm.labels.skillVersion}
               <input name="skillVersion" className="rounded-2xl border border-black/10 px-4 py-3" defaultValue={initialFinding?.skillVersion || ""} />
             </label>
             <label className="grid gap-2 text-sm">
-              Dataset tag
+              {dict.submitForm.labels.dataset}
               <select
                 name="datasetTag"
                 defaultValue={initialFinding?.datasetTag || "community"}
@@ -210,20 +213,20 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
               </select>
             </label>
             <label className="grid gap-2 text-sm">
-              Model tags
+              {dict.submitForm.labels.modelTags}
               <input
                 name="modelTags"
                 className="rounded-2xl border border-black/10 px-4 py-3"
-                placeholder="gpt-5.1, kimi-k2.5"
+                placeholder={dict.submitForm.placeholders.modelTags}
                 defaultValue={initialFinding?.modelTags.join(", ") || ""}
               />
             </label>
             <label className="grid gap-2 text-sm md:col-span-2">
-              Vulnerability type
+              {dict.submitForm.labels.vulnType}
               <input
                 name="vulnType"
                 className="rounded-2xl border border-black/10 px-4 py-3"
-                placeholder="Prompt Injection via Contextual Payloads"
+                placeholder={dict.submitForm.placeholders.vulnType}
                 defaultValue={initialFinding?.vulnType || ""}
               />
             </label>
@@ -231,42 +234,42 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
         </section>
 
         <section className="grid gap-4">
-          <h3 className="text-lg font-semibold">Evidence and reproduction narrative</h3>
+          <h3 className="text-lg font-semibold">{dict.submitForm.evidence}</h3>
           <label className="grid gap-2 text-sm">
-            Attack prompt or repro input
+            {dict.submitForm.labels.attackPrompt}
             <textarea name="attackPrompt" className="min-h-28 rounded-2xl border border-black/10 px-4 py-3" defaultValue={initialFinding?.attackPrompt || ""} />
           </label>
           <label className="grid gap-2 text-sm">
-            Expected risk
+            {dict.submitForm.labels.expectedRisk}
             <textarea name="expectedRisk" className="min-h-24 rounded-2xl border border-black/10 px-4 py-3" defaultValue={initialFinding?.expectedRisk || ""} />
           </label>
           <label className="grid gap-2 text-sm">
-            Reproduction steps
+            {dict.submitForm.labels.reproSteps}
             <textarea name="reproSteps" className="min-h-32 rounded-2xl border border-black/10 px-4 py-3" defaultValue={initialFinding?.reproSteps || ""} />
           </label>
           <label className="grid gap-2 text-sm">
-            Observed result
+            {dict.submitForm.labels.observedResult}
             <textarea name="observedResult" className="min-h-28 rounded-2xl border border-black/10 px-4 py-3" defaultValue={initialFinding?.observedResult || ""} />
           </label>
           <label className="grid gap-2 text-sm">
-            Smoking gun
+            {dict.submitForm.labels.smokingGun}
             <textarea name="smokingGun" className="min-h-24 rounded-2xl border border-black/10 px-4 py-3" defaultValue={initialFinding?.smokingGun || ""} />
           </label>
           <label className="grid gap-2 text-sm">
-            External references
+            {dict.submitForm.labels.externalReferences}
             <textarea
               name="externalReferences"
               className="min-h-24 rounded-2xl border border-black/10 px-4 py-3"
-              placeholder="One URL per line or comma-separated"
+              placeholder={dict.submitForm.placeholders.externalReferences}
               defaultValue={initialFinding?.externalReferences.join("\n") || ""}
             />
           </label>
         </section>
 
         <section className="grid gap-4">
-          <h3 className="text-lg font-semibold">Artifacts</h3>
+          <h3 className="text-lg font-semibold">{dict.submitForm.artifacts}</h3>
           <p className="text-sm text-slate-600">
-            Upload individual files or one zip bundle. Known artifacts are parsed automatically where possible.
+            {dict.submitForm.artifactBody}
           </p>
           <input
             name="files"
@@ -277,7 +280,7 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
           />
           <label className="flex items-center gap-3 rounded-2xl border border-black/10 bg-slate-50 px-4 py-3 text-sm">
             <input name="publicSafe" type="checkbox" className="size-4" defaultChecked={Boolean(initialFinding?.publicSafe)} />
-            Reporter claims the submitted report and uploaded files are already public-safe
+            {dict.submitForm.publicSafe}
           </label>
         </section>
 
@@ -288,10 +291,10 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
         {currentId ? (
           <div className="flex flex-wrap gap-3 text-sm">
             <Link href={`/reports/${currentId}`} className="rounded-full border border-black/10 bg-slate-50 px-4 py-2 transition hover:-translate-y-0.5">
-              View report status
+              {dict.submitForm.viewReport}
             </Link>
             <Link href={`/submit?id=${currentId}`} className="rounded-full border border-black/10 bg-slate-50 px-4 py-2 transition hover:-translate-y-0.5">
-              Reload this draft
+              {dict.submitForm.reloadDraft}
             </Link>
           </div>
         ) : null}
@@ -303,7 +306,7 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
             disabled={Boolean(working)}
             className="rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-medium transition hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {working === "save" ? "Saving..." : "Save draft"}
+            {working === "save" ? dict.submitForm.saving : dict.submitForm.save}
           </button>
           <button
             type="button"
@@ -311,7 +314,7 @@ export function SubmitFindingForm({ initialFinding }: SubmitFindingFormProps) {
             disabled={Boolean(working)}
             className="rounded-full bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {working === "submit" ? "Submitting..." : "Submit for review"}
+            {working === "submit" ? dict.submitForm.submitting : dict.submitForm.submit}
           </button>
         </div>
       </form>

@@ -4,25 +4,30 @@ import Link from "next/link";
 import { signIn, signOut } from "next-auth/react";
 
 import type { Viewer } from "@/lib/community";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { getDictionary, translateBackendMode, translateRole, type Locale } from "@/lib/i18n";
 
 interface AppShellProps {
   children: React.ReactNode;
   viewer: Viewer | null;
   backendMode: string;
   githubEnabled: boolean;
+  locale: Locale;
+  brand: string;
 }
 
-export function AppShell({ children, viewer, backendMode, githubEnabled }: AppShellProps) {
+export function AppShell({ children, viewer, backendMode, githubEnabled, locale, brand }: AppShellProps) {
+  const dict = getDictionary(locale);
   const nav = [
-    { href: "/", label: "Home" },
-    { href: "/findings", label: "Findings" },
-    { href: "/leaderboards", label: "Leaderboards" },
-    { href: "/datasets", label: "Datasets" },
-    { href: "/models", label: "Models" },
-    { href: "/submit", label: "Submit" },
-    ...(viewer ? [{ href: "/reports", label: "My Reports" }] : []),
+    { href: "/", label: dict.shell.nav.home },
+    { href: "/findings", label: dict.shell.nav.findings },
+    { href: "/leaderboards", label: dict.shell.nav.leaderboards },
+    { href: "/datasets", label: dict.shell.nav.datasets },
+    { href: "/models", label: dict.shell.nav.models },
+    { href: "/submit", label: dict.shell.nav.submit },
+    ...(viewer ? [{ href: "/reports", label: dict.shell.nav.reports }] : []),
     ...(viewer && (viewer.role === "reviewer" || viewer.role === "admin")
-      ? [{ href: "/review", label: "Review" }]
+      ? [{ href: "/review", label: dict.shell.nav.review }]
       : []),
   ];
 
@@ -32,10 +37,10 @@ export function AppShell({ children, viewer, backendMode, githubEnabled }: AppSh
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-1">
             <Link href="/" className="text-2xl font-semibold tracking-tight text-slate-950">
-              SkillAttackCommunity
+              {brand}
             </Link>
             <p className="max-w-2xl text-sm text-slate-600">
-              Half-open community for submitted vulnerability reports, reviewer verification, and public-safe case publication.
+              {dict.shell.tagline}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -52,16 +57,17 @@ export function AppShell({ children, viewer, backendMode, githubEnabled }: AppSh
         </div>
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-6 pb-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.18em] text-slate-500">
-            <span className="rounded-full bg-slate-950 px-3 py-1 text-white">{backendMode}</span>
-            <span className="rounded-full border border-black/10 bg-white px-3 py-1">report-first workflow</span>
-            <span className="rounded-full border border-black/10 bg-white px-3 py-1">reviewer verification</span>
+            <span className="rounded-full bg-slate-950 px-3 py-1 text-white">{translateBackendMode(backendMode, locale)}</span>
+            <span className="rounded-full border border-black/10 bg-white px-3 py-1">{dict.shell.chips.reportFirst}</span>
+            <span className="rounded-full border border-black/10 bg-white px-3 py-1">{dict.shell.chips.reviewerVerification}</span>
           </div>
           <div className="flex items-center gap-3">
+            <LanguageSwitcher locale={locale} />
             {viewer ? (
               <>
                 <div className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm">
-                  {viewer.name} · {viewer.role}
-                  {viewer.isDemo ? " · demo mode" : ""}
+                  {viewer.name} · {translateRole(viewer.role, locale)}
+                  {viewer.isDemo ? ` · ${dict.shell.demoMode}` : ""}
                 </div>
                 {viewer.isDemo ? null : (
                   <button
@@ -69,7 +75,7 @@ export function AppShell({ children, viewer, backendMode, githubEnabled }: AppSh
                     onClick={() => signOut()}
                     className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:-translate-y-0.5"
                   >
-                    Sign out
+                    {dict.shell.signOut}
                   </button>
                 )}
               </>
@@ -79,11 +85,11 @@ export function AppShell({ children, viewer, backendMode, githubEnabled }: AppSh
                 onClick={() => signIn("github")}
                 className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:-translate-y-0.5"
               >
-                Sign in with GitHub
+                {dict.shell.signIn}
               </button>
             ) : (
               <div className="rounded-full border border-dashed border-black/20 px-4 py-2 text-sm text-slate-600">
-                Configure GitHub OAuth or use demo auth
+                {dict.shell.authHint}
               </div>
             )}
           </div>

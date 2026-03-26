@@ -1,15 +1,19 @@
 import Link from "next/link";
 
 import { StatusBadge } from "@/components/status-badge";
+import { getDictionary } from "@/lib/i18n";
 import { getViewer } from "@/lib/server/auth";
+import { getLocale } from "@/lib/server/locale";
 import { listViewerFindings } from "@/lib/server/store";
 
 export default async function ReportsPage() {
+  const locale = await getLocale();
+  const dict = getDictionary(locale);
   const viewer = await getViewer();
   if (!viewer) {
     return (
       <div className="rounded-[2rem] border border-dashed border-black/15 bg-white/80 p-10 text-sm text-slate-600">
-        Sign in to see your submitted and drafted reports.
+        {dict.reportsIndex.signInRequired}
       </div>
     );
   }
@@ -19,9 +23,9 @@ export default async function ReportsPage() {
   return (
     <div className="grid gap-6">
       <section className="rounded-[2rem] border border-black/10 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <h1 className="text-3xl font-semibold tracking-tight">My reports</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{dict.reportsIndex.title}</h1>
         <p className="mt-2 text-sm leading-7 text-slate-600">
-          Track draft progress, reviewer feedback, and publication state for the vulnerability reports tied to your account.
+          {dict.reportsIndex.body}
         </p>
       </section>
 
@@ -34,12 +38,12 @@ export default async function ReportsPage() {
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3">
-                <StatusBadge status={item.finding.status} />
+                <StatusBadge status={item.finding.status} locale={locale} />
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-600">
                   {item.finding.datasetTag}
                 </span>
               </div>
-              <span className="text-sm text-slate-500">{item.bundle?.detectedFiles.length || 0} artifacts</span>
+              <span className="text-sm text-slate-500">{item.bundle?.detectedFiles.length || 0} {dict.reportsIndex.artifacts}</span>
             </div>
             <h2 className="text-xl font-semibold">{item.finding.title}</h2>
             <p className="text-sm leading-7 text-slate-600">{item.finding.summary}</p>
@@ -47,7 +51,7 @@ export default async function ReportsPage() {
               <span className="rounded-full bg-slate-50 px-3 py-1">{item.finding.skillName}</span>
               <span className="rounded-full bg-slate-50 px-3 py-1">{item.finding.vulnType}</span>
               {item.published ? (
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">public case live</span>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">{dict.reportsIndex.publicCaseLive}</span>
               ) : null}
             </div>
           </Link>
@@ -55,7 +59,7 @@ export default async function ReportsPage() {
 
         {!reports.length ? (
           <div className="rounded-[1.6rem] border border-dashed border-black/15 bg-white/70 p-10 text-sm text-slate-600">
-            You have not created a finding report yet.
+            {dict.reportsIndex.empty}
           </div>
         ) : null}
       </section>

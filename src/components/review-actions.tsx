@@ -3,16 +3,19 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import type { DuplicateCandidate, FindingReport, PublishedFinding } from "@/lib/community";
+import type { DuplicateCandidate, FindingReport, FindingStatus, PublishedFinding } from "@/lib/community";
+import { getDictionary, translateStatus, type Locale } from "@/lib/i18n";
 
 interface ReviewActionsProps {
   finding: FindingReport;
   duplicateCandidates: DuplicateCandidate[];
   published?: PublishedFinding;
+  locale: Locale;
 }
 
-export function ReviewActions({ finding, duplicateCandidates, published }: ReviewActionsProps) {
+export function ReviewActions({ finding, duplicateCandidates, published, locale }: ReviewActionsProps) {
   const router = useRouter();
+  const dict = getDictionary(locale);
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [notes, setNotes] = useState("");
@@ -23,7 +26,7 @@ export function ReviewActions({ finding, duplicateCandidates, published }: Revie
   const [publicTitle, setPublicTitle] = useState(finding.title);
   const [publicSummary, setPublicSummary] = useState(finding.summary);
 
-  async function transition(status: string) {
+  async function transition(status: FindingStatus) {
     setWorking(status);
     setMessage("");
     try {
@@ -41,12 +44,12 @@ export function ReviewActions({ finding, duplicateCandidates, published }: Revie
       });
       const json = await response.json();
       if (!response.ok) {
-        throw new Error(json.error || "Could not update status.");
+        throw new Error(json.error || dict.reviewActions.updateError);
       }
-      setMessage(`Status moved to ${status}.`);
+      setMessage(`${dict.reviewActions.statusMoved} ${translateStatus(status, locale)}.`);
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not update status.");
+      setMessage(error instanceof Error ? error.message : dict.reviewActions.updateError);
     } finally {
       setWorking(null);
     }
@@ -67,12 +70,12 @@ export function ReviewActions({ finding, duplicateCandidates, published }: Revie
       });
       const json = await response.json();
       if (!response.ok) {
-        throw new Error(json.error || "Could not publish.");
+        throw new Error(json.error || dict.reviewActions.publishError);
       }
       router.push(`/findings/${json.published.slug}`);
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not publish.");
+      setMessage(error instanceof Error ? error.message : dict.reviewActions.publishError);
       setWorking(null);
     }
   }
@@ -86,12 +89,12 @@ export function ReviewActions({ finding, duplicateCandidates, published }: Revie
       });
       const json = await response.json();
       if (!response.ok) {
-        throw new Error(json.error || "Could not unpublish.");
+        throw new Error(json.error || dict.reviewActions.unpublishError);
       }
-      setMessage("Public case removed from the index. Finding returned to reviewer_verified.");
+      setMessage(dict.reviewActions.unpublishedMessage);
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not unpublish.");
+      setMessage(error instanceof Error ? error.message : dict.reviewActions.unpublishError);
     } finally {
       setWorking(null);
     }
@@ -99,15 +102,15 @@ export function ReviewActions({ finding, duplicateCandidates, published }: Revie
 
   return (
     <div className="grid gap-4 rounded-3xl border border-black/10 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-      <h3 className="text-xl font-semibold">Reviewer actions</h3>
+      <h3 className="text-xl font-semibold">{dict.reviewActions.title}</h3>
 
       <label className="grid gap-2 text-sm">
-        Reviewer notes
+        {dict.reviewActions.reviewerNotes}
         <textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-24 rounded-2xl border border-black/10 px-4 py-3" />
       </label>
 
       <label className="grid gap-2 text-sm">
-        Redaction notes
+        {dict.reviewActions.redactionNotes}
         <textarea
           value={redactionNotes}
           onChange={(event) => setRedactionNotes(event.target.value)}
@@ -116,17 +119,17 @@ export function ReviewActions({ finding, duplicateCandidates, published }: Revie
       </label>
 
       <label className="grid gap-2 text-sm">
-        Redaction flags (comma separated)
+        {dict.reviewActions.redactionFlags}
         <input
           value={redactionFlags}
           onChange={(event) => setRedactionFlags(event.target.value)}
           className="rounded-2xl border border-black/10 px-4 py-3"
-          placeholder="e.g. needs vendor-safe rewrite, scrub local path"
+          placeholder={dict.reviewActions.redactionPlaceholder}
         />
       </label>
 
       <label className="grid gap-2 text-sm">
-        Verification summary
+        {dict.reviewActions.verificationSummary}
         <textarea
           value={verificationSummary}
           onChange={(event) => setVerificationSummary(event.target.value)}
@@ -136,13 +139,13 @@ export function ReviewActions({ finding, duplicateCandidates, published }: Revie
 
       {duplicateCandidates.length ? (
         <label className="grid gap-2 text-sm">
-          Duplicate target
+          {dict.reviewActions.duplicateTarget}
           <select
             value={duplicateTargetId}
             onChange={(event) => setDuplicateTargetId(event.target.value)}
             className="rounded-2xl border border-black/10 px-4 py-3"
           >
-            <option value="">Select a duplicate target</option>
+            <option value="">{dict.reviewActions.selectDuplicate}</option>
             {duplicateCandidates.map((candidate) => (
               <option key={candidate.findingId} value={candidate.findingId}>
                 {candidate.title} · score {candidate.score}
@@ -154,33 +157,33 @@ export function ReviewActions({ finding, duplicateCandidates, published }: Revie
 
       <div className="flex flex-wrap gap-3">
         <button type="button" onClick={() => transition("needs_info")} disabled={Boolean(working)} className="rounded-full border border-black/10 px-4 py-2 text-sm">
-          {working === "needs_info" ? "Working..." : "Mark needs_info"}
+          {working === "needs_info" ? dict.reviewActions.working : dict.reviewActions.markNeedsInfo}
         </button>
         <button type="button" onClick={() => transition("triaged")} disabled={Boolean(working)} className="rounded-full border border-black/10 px-4 py-2 text-sm">
-          {working === "triaged" ? "Working..." : "Mark triaged"}
+          {working === "triaged" ? dict.reviewActions.working : dict.reviewActions.markTriaged}
         </button>
         <button type="button" onClick={() => transition("duplicate")} disabled={Boolean(working)} className="rounded-full border border-black/10 px-4 py-2 text-sm">
-          {working === "duplicate" ? "Working..." : "Mark duplicate"}
+          {working === "duplicate" ? dict.reviewActions.working : dict.reviewActions.markDuplicate}
         </button>
         <button type="button" onClick={() => transition("redaction_required")} disabled={Boolean(working)} className="rounded-full border border-black/10 px-4 py-2 text-sm">
-          {working === "redaction_required" ? "Working..." : "Mark redaction_required"}
+          {working === "redaction_required" ? dict.reviewActions.working : dict.reviewActions.markRedaction}
         </button>
         <button type="button" onClick={() => transition("reviewer_verified")} disabled={Boolean(working)} className="rounded-full bg-emerald-700 px-4 py-2 text-sm text-white">
-          {working === "reviewer_verified" ? "Working..." : "Mark reviewer_verified"}
+          {working === "reviewer_verified" ? dict.reviewActions.working : dict.reviewActions.markVerified}
         </button>
         <button type="button" onClick={() => transition("rejected")} disabled={Boolean(working)} className="rounded-full bg-red-700 px-4 py-2 text-sm text-white">
-          {working === "rejected" ? "Working..." : "Reject"}
+          {working === "rejected" ? dict.reviewActions.working : dict.reviewActions.reject}
         </button>
       </div>
 
       <div className="grid gap-3 rounded-3xl border border-black/10 bg-slate-50 p-4">
-        <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Publish composer</h4>
+        <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">{dict.reviewActions.publishComposer}</h4>
         <label className="grid gap-2 text-sm">
-          Public title
+          {dict.reviewActions.publicTitle}
           <input value={publicTitle} onChange={(event) => setPublicTitle(event.target.value)} className="rounded-2xl border border-black/10 px-4 py-3" />
         </label>
         <label className="grid gap-2 text-sm">
-          Public summary
+          {dict.reviewActions.publicSummary}
           <textarea
             value={publicSummary}
             onChange={(event) => setPublicSummary(event.target.value)}
@@ -188,7 +191,7 @@ export function ReviewActions({ finding, duplicateCandidates, published }: Revie
           />
         </label>
         <button type="button" onClick={publish} disabled={Boolean(working)} className="w-fit rounded-full bg-slate-950 px-5 py-3 text-sm font-medium text-white">
-          {working === "publish" ? "Publishing..." : "Publish public case"}
+          {working === "publish" ? dict.reviewActions.publishing : dict.reviewActions.publish}
         </button>
         {published ? (
           <button
@@ -197,7 +200,7 @@ export function ReviewActions({ finding, duplicateCandidates, published }: Revie
             disabled={Boolean(working)}
             className="w-fit rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-medium"
           >
-            {working === "unpublish" ? "Unpublishing..." : "Unpublish public case"}
+            {working === "unpublish" ? dict.reviewActions.unpublishing : dict.reviewActions.unpublish}
           </button>
         ) : null}
       </div>

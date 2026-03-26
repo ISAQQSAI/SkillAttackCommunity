@@ -1,6 +1,10 @@
 import { getLeaderboardSnapshot } from "@/lib/server/store";
+import { getDictionary } from "@/lib/i18n";
+import { getLocale } from "@/lib/server/locale";
 
 export default async function LeaderboardsPage() {
+  const locale = await getLocale();
+  const dict = getDictionary(locale);
   const snapshot = await getLeaderboardSnapshot();
   const payload = (snapshot?.payload || {}) as {
     reportersByPublished?: Array<{ userId: string; label: string; count: number }>;
@@ -10,18 +14,18 @@ export default async function LeaderboardsPage() {
   };
 
   const sections = [
-    { title: "Top reporters by published findings", items: payload.reportersByPublished || [] },
-    { title: "Top reporters by verified findings", items: payload.reportersByVerified || [] },
-    { title: "Top skills by published findings", items: payload.skillsByPublished || [] },
-    { title: "Top vendors by published findings", items: payload.vendorsByPublished || [] },
+    { title: dict.leaderboards.reportersByPublished, items: payload.reportersByPublished || [] },
+    { title: dict.leaderboards.reportersByVerified, items: payload.reportersByVerified || [] },
+    { title: dict.leaderboards.skillsByPublished, items: payload.skillsByPublished || [] },
+    { title: dict.leaderboards.vendorsByPublished, items: payload.vendorsByPublished || [] },
   ];
 
   return (
     <div className="grid gap-6">
       <section className="rounded-[2rem] border border-black/10 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <h1 className="text-3xl font-semibold tracking-tight">Leaderboards</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{dict.leaderboards.title}</h1>
         <p className="mt-2 text-sm leading-7 text-slate-600">
-          Informational ranking only. No payouts, no badges, just published and verified report counts.
+          {dict.leaderboards.body}
         </p>
       </section>
       <section className="grid gap-4 lg:grid-cols-2">

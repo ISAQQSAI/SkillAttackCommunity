@@ -30,6 +30,10 @@ a {
   color: inherit;
 }
 
+a:visited {
+  color: inherit;
+}
+
 .landing-hero {
   background:
     radial-gradient(circle at top left, rgba(196, 255, 79, 0.16), transparent 18%),

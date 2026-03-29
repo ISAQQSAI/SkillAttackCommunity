@@ -58,10 +58,11 @@ export function AppShell({ children, viewer, backendMode, githubEnabled, locale,
             <div className="grid grid-cols-[auto_1fr] items-center gap-2.5">
               <Link href="/home" className="text-slate-950">
                 <Image
-                  src="/skillattack-logo.png"
-                  alt="SkillAttack logo"
+                  src="/skillattack-logo.png?v=20260329"
+                  alt="SkillAtlas logo"
                   width={112}
                   height={112}
+                  unoptimized
                   className="h-16 w-16 rounded-[1.2rem] border border-black/10 bg-white p-1.5 object-contain shadow-[0_10px_30px_rgba(15,23,42,0.08)] sm:h-[4.5rem] sm:w-[4.5rem]"
                 />
               </Link>

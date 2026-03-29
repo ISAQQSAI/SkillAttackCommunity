@@ -13,9 +13,8 @@ export function isLocale(value: string | undefined | null): value is Locale {
 const dictionaries = {
   en: {
     shell: {
-      brand: "SkillAttackCommunity",
-      tagline:
-        "Half-open community for submitted vulnerability reports, reviewer verification, and public-safe case publication.",
+      brand: "SkillAtlas",
+      tagline: "Skill Attack Trace Library for Agent Safety.",
       nav: {
         home: "Home",
         skills: "Skill Vault",
@@ -65,7 +64,7 @@ const dictionaries = {
       heroBadge: "Half-open finding community",
       heroTitle: "Publish verified vulnerability reports, not raw skills.",
       heroBody:
-        "SkillAttackCommunity is a report-first workflow for collecting audited findings, reviewing evidence, redacting risky details, and publishing public-safe case pages with model, dataset, and reproduction context.",
+        "SkillAtlas is a report-first workflow for collecting audited findings, reviewing evidence, redacting risky details, and publishing public-safe case pages with model, dataset, and reproduction context.",
       submit: "Submit a finding",
       review: "Open reviewer queue",
       backend: "backend",
@@ -312,8 +311,8 @@ const dictionaries = {
   },
   zh: {
     shell: {
-      brand: "SkillAttackCommunity",
-      tagline: "一个半开放的漏洞报告社区，用于提交审计后的漏洞报告、验证证据并发布可公开的标准化案例页。",
+      brand: "SkillAtlas",
+      tagline: "面向 Agent 安全的技能攻击轨迹库。",
       nav: {
         home: "首页",
         skills: "Skill 库",
@@ -363,7 +362,7 @@ const dictionaries = {
       heroBadge: "半开放漏洞报告社区",
       heroTitle: "发布经过验证的漏洞报告，而不是原始 skill。",
       heroBody:
-        "SkillAttackCommunity 是一个以报告为中心的工作流，用来收集已审计的发现、审核证据、脱敏高风险细节，并发布带有模型、数据集与复现上下文的公开案例页。",
+        "SkillAtlas 是一个以报告为中心的工作流，用来收集已审计的发现、审核证据、脱敏高风险细节，并发布带有模型、数据集与复现上下文的公开案例页。",
       submit: "提交漏洞报告",
       review: "进入审核队列",
       backend: "后端",

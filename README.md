@@ -1,4 +1,6 @@
-# SkillAttackCommunity
+# SkillAtlas
+
+SkillAtlas — Skill Attack Trace Library for Agent Safety.
 
 Half-open community for submitting audited vulnerability reports, reviewing evidence, and publishing public-safe case pages.
 
@@ -194,7 +196,7 @@ python3 worker/main.py --once
 
 ## Artifact Conventions
 
-The upload parser understands these common SkillAttack artifacts:
+The upload parser understands these common SkillAtlas artifacts:
 
 - `analysis.json`
 - `attack.json`

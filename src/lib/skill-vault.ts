@@ -1,120 +1,144 @@
-import bundle from "@/data/skillattack-showcase-bundle.json";
-import type { Locale } from "@/lib/i18n";
-import { skillAttackLinks } from "@/lib/skillattack-links";
+import { promises as fs } from "fs";
+import path from "path";
+import { cache } from "react";
 
-const DATASET_ORDER = ["obvious", "contextual", "hot100"] as const;
-type DatasetId = (typeof DATASET_ORDER)[number];
-type ShowcaseVerdict = "attack_success" | "ignored" | "technical";
+import type { Locale } from "@/lib/i18n";
+
+const DATA_ROOT = path.join(process.cwd(), "tmpreport_hot100_real");
+const MANIFEST_PATH = path.join(DATA_ROOT, "manifest.json");
+
+type SkillVaultVerdict = "attack_success" | "ignored" | "technical" | string;
 
 interface LocalizedText {
   en: string;
   zh: string;
 }
 
-interface BundleRunSample {
-  run: string;
-  verdict: ShowcaseVerdict;
-  vuln: string;
+interface SkillVaultManifest {
+  kept_skill_count?: number;
+  kept_report_count?: number;
+  kept_skills?: string[];
+}
+
+interface RawSkillSection {
+  skill_id?: string;
+  skill_hash?: string;
+  source_link?: string;
+}
+
+interface RawJudgeSection {
+  verdict?: string;
   confidence?: number;
-  failure_reason?: string;
+  smoking_gun?: string[] | string;
+  reason_code?: string;
 }
 
-interface BundleCase {
+interface RawExecutionObservations {
+  model?: string;
+  provider?: string;
+  evidence_summary?: string;
+  observed_path?: string;
+  observed_paths?: string[];
+}
+
+interface RawPredictedStep {
+  tool?: string | null;
+}
+
+interface RawFindingOtherInfo {
+  predicted_trajectory?: RawPredictedStep[];
+}
+
+interface RawAgentTrajectory {
+  final_response?: string;
+  execution_observations?: RawExecutionObservations;
+}
+
+interface RawFinding {
+  finding_id?: string;
+  harmful_prompt?: string;
+  harm_type?: string;
+  vulnerability_surface?: string;
+  judge?: RawJudgeSection;
+  agent_trajectory?: RawAgentTrajectory;
+  other_info?: RawFindingOtherInfo;
+}
+
+interface RawReportOtherInfo {
+  generated_at?: string;
+  finding_count?: number;
+}
+
+interface RawSkillVaultReport {
+  skill?: RawSkillSection;
+  findings?: RawFinding[];
+  other_info?: RawReportOtherInfo;
+}
+
+interface SkillParts {
+  ordinal: string | null;
+  owner: string;
+  ownerLabel: string;
+  name: string;
+  nameLabel: string;
+}
+
+export interface SkillVaultReportEntry {
   id: string;
-  dataset: DatasetId;
+  fileName: string;
+  reportUrl: string;
   model: string;
-  skill: string;
-  skill_label: string;
-  summary_path: string;
-  latest_run: string;
-  latest_failure: string;
-  primary_verdict: ShowcaseVerdict;
-  has_artifacts: boolean;
-  artifact_dir: string;
-  artifact_paths: Record<string, string>;
-  vulns: Array<{ label: string; count: number }>;
-  stats: {
-    total_runs: number;
-    attack_success: number;
-    ignored: number;
-    technical: number;
-    evaluable_runs: number;
-    attack_success_rate: number;
-    technical_rate: number;
-  };
-  run_samples: BundleRunSample[];
-  score: number;
-}
-
-interface BundleData {
-  overall: {
-    total_runs: number;
-    attack_success: number;
-    ignored: number;
-    technical: number;
-    evaluable_runs: number;
-    attack_success_rate: number;
-    technical_rate: number;
-    dataset_count: number;
-    model_count: number;
-    summary_count: number;
-    case_count: number;
-  };
-  datasets: Array<{
-    id: DatasetId;
-    label: string;
-    stats: BundleCase["stats"];
-    model_count: number;
-    case_count: number;
-  }>;
-  models: Array<{ id: string; label: string }>;
-  cases: BundleCase[];
-}
-
-export interface SkillVaultEntry {
-  id: string;
-  dataset: DatasetId;
-  model: string;
-  skillId: string;
-  skillLabel: string;
-  verdict: ShowcaseVerdict;
-  vulnLabels: string[];
-  latestRun: string;
+  provider: string;
+  runId: string;
   lane: number | null;
   round: number | null;
+  verdict: SkillVaultVerdict;
   confidence: number | null;
-  totalRuns: number;
-  attackSuccess: number;
-  ignored: number;
-  technical: number;
-  attackSuccessRate: number;
-  technicalRate: number;
-  reason: string;
-  summaryUrl: string;
-  artifactUrl?: string;
-  artifactCount: number;
-  score: number;
+  harmType: string;
+  vulnerabilitySurface: string;
+  reasonCode: string;
+  evidenceSummary: string;
+  smokingGun: string[];
+  smokingGunExcerpt: string;
+  harmfulPromptExcerpt: string;
+  finalResponseExcerpt: string;
+  observedPaths: string[];
+  predictedTools: string[];
+  generatedAt: string;
+}
+
+interface InternalSkillVaultReportEntry extends SkillVaultReportEntry {
+  reportPath: string;
 }
 
 export interface SkillVaultRecord {
   slug: string;
   skillId: string;
   skillLabel: string;
-  datasets: DatasetId[];
+  ordinal: string | null;
+  owner: string;
+  ownerLabel: string;
+  skillName: string;
+  sourceLink: string;
+  skillHash: string;
+  skillArchiveUrl?: string;
+  reportCount: number;
+  successCount: number;
+  modelCount: number;
   models: string[];
-  vulnLabels: string[];
-  totalRuns: number;
-  attackSuccess: number;
-  ignored: number;
-  technical: number;
-  attackSuccessRate: number;
-  technicalRate: number;
-  entryCount: number;
-  successfulEntries: number;
-  successfulModels: number;
-  firstSuccessfulEntry: SkillVaultEntry | null;
-  representativeReason: string;
-  entries: SkillVaultEntry[];
+  harmTypes: string[];
+  surfaceLabels: string[];
+  primaryHarmType: string;
+  primarySurfaceLabel: string;
+  representativeReport: SkillVaultReportEntry | null;
+  representativeSummary: string;
+  reports: SkillVaultReportEntry[];
+}
+
+interface InternalSkillVaultRecord extends Omit<SkillVaultRecord, "representativeReport" | "reports"> {
+  skillArchivePath?: string;
+  representativeReport: InternalSkillVaultReportEntry | null;
+  reports: InternalSkillVaultReportEntry[];
 }
 
 export interface SkillVaultSummary {
@@ -123,230 +147,377 @@ export interface SkillVaultSummary {
   totalRuns: number;
   caseEntryCount: number;
   datasetCount: number;
+  reportCount: number;
+  harmTypeCount: number;
+  surfaceCount: number;
 }
 
 interface SkillVaultFilters {
   q?: string;
-  dataset?: string;
   vuln?: string;
-  model?: string;
 }
-
-const showcaseBundle = bundle as BundleData;
-const REPO_SHOWCASE_ROOT = `${skillAttackLinks.repoUrl}/showcase`;
 
 function pick(locale: Locale, text: LocalizedText) {
   return text[locale];
 }
 
-function excerpt(value: string, length = 220) {
-  if (!value) {
+function compactText(value: string | undefined | null) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function excerpt(value: string | undefined | null, length = 220) {
+  const text = compactText(value);
+  if (!text) {
     return "";
   }
-  return value.length > length ? `${value.slice(0, length - 1).trimEnd()}...` : value;
+  return text.length > length ? `${text.slice(0, length - 1).trimEnd()}...` : text;
 }
 
-function toRepoUrl(relativePath: string) {
-  return `${REPO_SHOWCASE_ROOT}/${relativePath}`;
-}
-
-function parseLaneRound(runId: string) {
-  const match = /lane(\d+)-r(\d+)/i.exec(runId);
+function parseLaneRound(value: string) {
+  const match = /lane(\d+)-r(\d+)/i.exec(value);
   return {
     lane: match ? Number(match[1]) : null,
     round: match ? Number(match[2]) : null,
   };
 }
 
-function sortDatasets(values: Iterable<DatasetId>) {
-  return Array.from(new Set(values)).sort(
-    (left, right) => DATASET_ORDER.indexOf(left) - DATASET_ORDER.indexOf(right)
-  );
+function humanizeIdentifier(value: string) {
+  return value
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
 }
 
-function sortModels(values: Iterable<string>) {
-  return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
-}
+function parseSkillParts(skillId: string): SkillParts {
+  const [ordinalMaybe, ownerMaybe, ...rest] = skillId.split("_");
+  const hasOrdinal = /^\d+$/.test(ordinalMaybe || "");
+  const owner = hasOrdinal ? ownerMaybe || "unknown" : ordinalMaybe || "unknown";
+  const name = hasOrdinal ? rest.join("_") || skillId : [ownerMaybe, ...rest].filter(Boolean).join("_") || skillId;
 
-function sortVulns(values: Iterable<string>) {
-  return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
-}
-
-function entrySort(left: SkillVaultEntry, right: SkillVaultEntry) {
-  return (
-    DATASET_ORDER.indexOf(left.dataset) - DATASET_ORDER.indexOf(right.dataset) ||
-    left.model.localeCompare(right.model)
-  );
-}
-
-function chooseRepresentativeSample(item: BundleCase) {
-  return (
-    item.run_samples.find((sample) => sample.verdict === "attack_success") ||
-    item.run_samples[0] || {
-      run: item.latest_run,
-      verdict: item.primary_verdict,
-      vuln: item.vulns[0]?.label || "",
-      confidence: undefined,
-      failure_reason: item.latest_failure,
-    }
-  );
-}
-
-const skillVaultEntries: SkillVaultEntry[] = showcaseBundle.cases
-  .map((item) => {
-    const sample = chooseRepresentativeSample(item);
-    const laneRound = parseLaneRound(sample.run || item.latest_run);
-
-    return {
-      id: item.id,
-      dataset: item.dataset,
-      model: item.model,
-      skillId: item.skill,
-      skillLabel: item.skill_label,
-      verdict: item.primary_verdict,
-      vulnLabels: item.vulns.map((vuln) => vuln.label),
-      latestRun: sample.run || item.latest_run,
-      lane: laneRound.lane,
-      round: laneRound.round,
-      confidence: typeof sample.confidence === "number" ? sample.confidence : null,
-      totalRuns: item.stats.total_runs,
-      attackSuccess: item.stats.attack_success,
-      ignored: item.stats.ignored,
-      technical: item.stats.technical,
-      attackSuccessRate: item.stats.attack_success_rate,
-      technicalRate: item.stats.technical_rate,
-      reason: excerpt(sample.failure_reason || item.latest_failure, 240),
-      summaryUrl: toRepoUrl(item.summary_path),
-      artifactUrl: item.has_artifacts && item.artifact_dir ? toRepoUrl(item.artifact_dir) : undefined,
-      artifactCount: Object.keys(item.artifact_paths || {}).length,
-      score: item.score,
-    };
-  })
-  .sort(entrySort);
-
-const skillVaultRecords = Array.from(
-  skillVaultEntries.reduce((map, entry) => {
-    const current = map.get(entry.skillId) || [];
-    current.push(entry);
-    map.set(entry.skillId, current);
-    return map;
-  }, new Map<string, SkillVaultEntry[]>()).entries()
-)
-  .map(([skillId, entries]) => {
-    const sortedEntries = [...entries].sort(entrySort);
-    const totalRuns = sortedEntries.reduce((sum, entry) => sum + entry.totalRuns, 0);
-    const attackSuccess = sortedEntries.reduce((sum, entry) => sum + entry.attackSuccess, 0);
-    const ignored = sortedEntries.reduce((sum, entry) => sum + entry.ignored, 0);
-    const technical = sortedEntries.reduce((sum, entry) => sum + entry.technical, 0);
-    const firstSuccessfulEntry =
-      sortedEntries.find((entry) => entry.verdict === "attack_success") || null;
-
-    return {
-      slug: skillId,
-      skillId,
-      skillLabel: sortedEntries[0]?.skillLabel || skillId,
-      datasets: sortDatasets(sortedEntries.map((entry) => entry.dataset)),
-      models: sortModels(sortedEntries.map((entry) => entry.model)),
-      vulnLabels: sortVulns(sortedEntries.flatMap((entry) => entry.vulnLabels)),
-      totalRuns,
-      attackSuccess,
-      ignored,
-      technical,
-      attackSuccessRate: totalRuns ? Number(((attackSuccess / totalRuns) * 100).toFixed(2)) : 0,
-      technicalRate: totalRuns ? Number(((technical / totalRuns) * 100).toFixed(2)) : 0,
-      entryCount: sortedEntries.length,
-      successfulEntries: sortedEntries.filter((entry) => entry.verdict === "attack_success").length,
-      successfulModels: new Set(
-        sortedEntries
-          .filter((entry) => entry.verdict === "attack_success")
-          .map((entry) => entry.model)
-      ).size,
-      firstSuccessfulEntry,
-      representativeReason: firstSuccessfulEntry?.reason || sortedEntries[0]?.reason || "",
-      entries: sortedEntries,
-    } satisfies SkillVaultRecord;
-  })
-  .sort((left, right) => left.skillLabel.localeCompare(right.skillLabel));
-
-export function getSkillVaultSummary(): SkillVaultSummary {
   return {
-    uniqueSkillCount: skillVaultRecords.length,
-    modelCount: showcaseBundle.models.length,
-    totalRuns: showcaseBundle.overall.total_runs,
-    caseEntryCount: showcaseBundle.overall.case_count,
-    datasetCount: showcaseBundle.overall.dataset_count,
+    ordinal: hasOrdinal ? ordinalMaybe : null,
+    owner,
+    ownerLabel: humanizeIdentifier(owner),
+    name,
+    nameLabel: humanizeIdentifier(name),
   };
 }
 
-export function listSkillVaultRecords(filters: SkillVaultFilters = {}) {
-  const query = filters.q?.trim().toLowerCase();
-  const dataset = filters.dataset?.trim().toLowerCase() as DatasetId | undefined;
-  const vuln = filters.vuln?.trim().toLowerCase();
-  const model = filters.model?.trim().toLowerCase();
+function uniqueSorted(values: Iterable<string>) {
+  return Array.from(new Set(Array.from(values).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right)
+  );
+}
 
-  return skillVaultRecords.filter((record) => {
-    if (query) {
-      const haystack = [
-        record.skillId,
-        record.skillLabel,
-        ...record.vulnLabels,
-        ...record.models,
-      ]
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(query)) {
-        return false;
-      }
-    }
+function frequencyFirst(values: string[]) {
+  const counts = new Map<string, number>();
+  for (const value of values.filter(Boolean)) {
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([value]) => value);
+}
 
-    if (dataset && !record.datasets.includes(dataset)) {
-      return false;
-    }
+function buildSkillArchiveUrl(skillId: string) {
+  return `/api/skill-vault/skills/${encodeURIComponent(skillId)}/skill`;
+}
 
-    if (vuln && !record.vulnLabels.some((item) => item.toLowerCase().includes(vuln))) {
-      return false;
-    }
+function buildReportUrl(skillId: string, fileName: string) {
+  return `/api/skill-vault/skills/${encodeURIComponent(skillId)}/reports/${encodeURIComponent(fileName)}`;
+}
 
-    if (model && !record.models.some((item) => item.toLowerCase().includes(model))) {
-      return false;
-    }
+function stripReport(entry: InternalSkillVaultReportEntry): SkillVaultReportEntry {
+  const { reportPath: _reportPath, ...publicEntry } = entry;
+  return publicEntry;
+}
 
+function stripRecord(record: InternalSkillVaultRecord): SkillVaultRecord {
+  const { skillArchivePath: _skillArchivePath, representativeReport, reports, ...rest } = record;
+  return {
+    ...rest,
+    representativeReport: representativeReport ? stripReport(representativeReport) : null,
+    reports: reports.map(stripReport),
+  };
+}
+
+function reportRank(entry: InternalSkillVaultReportEntry) {
+  let score = 0;
+  if (entry.verdict === "attack_success") {
+    score += 100;
+  }
+  if (entry.harmType && entry.harmType.toLowerCase() !== "safe") {
+    score += 20;
+  }
+  score += (entry.confidence || 0) * 10;
+  score += entry.smokingGunExcerpt ? 4 : 0;
+  score += entry.vulnerabilitySurface ? 2 : 0;
+  score += entry.evidenceSummary ? 1 : 0;
+  return score;
+}
+
+function reportSort(left: InternalSkillVaultReportEntry, right: InternalSkillVaultReportEntry) {
+  return (
+    reportRank(right) - reportRank(left) ||
+    (right.confidence || 0) - (left.confidence || 0) ||
+    left.model.localeCompare(right.model) ||
+    left.fileName.localeCompare(right.fileName)
+  );
+}
+
+function getVerdictLabelFallback(value: string) {
+  return value.replaceAll("_", " ");
+}
+
+async function readManifest(): Promise<SkillVaultManifest> {
+  try {
+    const content = await fs.readFile(MANIFEST_PATH, "utf-8");
+    return JSON.parse(content) as SkillVaultManifest;
+  } catch {
+    return {};
+  }
+}
+
+async function fileExists(target: string) {
+  try {
+    await fs.access(target);
     return true;
-  });
+  } catch {
+    return false;
+  }
 }
 
-export function getSkillVaultRecord(skillId: string) {
-  return skillVaultRecords.find((record) => record.slug === skillId) || null;
+async function loadSkillRecord(skillId: string): Promise<InternalSkillVaultRecord | null> {
+  const skillDir = path.join(DATA_ROOT, skillId);
+  const reportsDir = path.join(skillDir, "reports");
+  const skillArchivePath = path.join(skillDir, "skill.zip");
+  const skillArchiveExists = await fileExists(skillArchivePath);
+
+  let reportFiles: string[] = [];
+  try {
+    reportFiles = (await fs.readdir(reportsDir))
+      .filter((fileName) => fileName.endsWith(".json"))
+      .sort((left, right) => left.localeCompare(right));
+  } catch {
+    reportFiles = [];
+  }
+
+  const parsedReports = await Promise.all(
+    reportFiles.map(async (fileName) => {
+      const reportPath = path.join(reportsDir, fileName);
+      const raw = JSON.parse(await fs.readFile(reportPath, "utf-8")) as RawSkillVaultReport;
+      const finding = raw.findings?.[0];
+      if (!finding) {
+        return null;
+      }
+
+      const reportBase = fileName.replace(/\.json$/i, "");
+      const [modelFromName, runIdFromName = reportBase] = reportBase.split("__");
+      const observations = finding.agent_trajectory?.execution_observations;
+      const smokingGun = Array.isArray(finding.judge?.smoking_gun)
+        ? finding.judge?.smoking_gun.map((item) => excerpt(item, 260)).filter(Boolean)
+        : finding.judge?.smoking_gun
+          ? [excerpt(finding.judge.smoking_gun, 260)]
+          : [];
+      const predictedTools = uniqueSorted(
+        (finding.other_info?.predicted_trajectory || [])
+          .map((step) => compactText(step.tool))
+          .filter(Boolean)
+      );
+      const observedPaths = uniqueSorted([
+        observations?.observed_path || "",
+        ...(observations?.observed_paths || []),
+      ]);
+      const laneRound = parseLaneRound(runIdFromName);
+
+      return {
+        id: reportBase,
+        fileName,
+        reportPath,
+        reportUrl: buildReportUrl(skillId, fileName),
+        model: compactText(observations?.model) || modelFromName || "unknown",
+        provider: compactText(observations?.provider),
+        runId: runIdFromName,
+        lane: laneRound.lane,
+        round: laneRound.round,
+        verdict: compactText(finding.judge?.verdict) || "unknown",
+        confidence: typeof finding.judge?.confidence === "number" ? finding.judge.confidence : null,
+        harmType: compactText(finding.harm_type) || "unknown",
+        vulnerabilitySurface: compactText(finding.vulnerability_surface),
+        reasonCode: compactText(finding.judge?.reason_code),
+        evidenceSummary: excerpt(observations?.evidence_summary, 240),
+        smokingGun,
+        smokingGunExcerpt: smokingGun[0] || "",
+        harmfulPromptExcerpt: excerpt(finding.harmful_prompt, 280),
+        finalResponseExcerpt: excerpt(finding.agent_trajectory?.final_response, 280),
+        observedPaths,
+        predictedTools,
+        generatedAt: compactText(raw.other_info?.generated_at),
+      } satisfies InternalSkillVaultReportEntry;
+    })
+  );
+
+  const reports = parsedReports.filter((item): item is InternalSkillVaultReportEntry => Boolean(item)).sort(reportSort);
+  const fallbackSkillId = reports[0]?.id ? skillId : skillId;
+  const skillMeta = reports.length
+    ? JSON.parse(await fs.readFile(reports[0].reportPath, "utf-8")) as RawSkillVaultReport
+    : null;
+  const rawSkillId = compactText(skillMeta?.skill?.skill_id) || fallbackSkillId;
+  const parts = parseSkillParts(rawSkillId);
+  const models = uniqueSorted(reports.map((entry) => entry.model));
+  const harmTypes = frequencyFirst(reports.map((entry) => entry.harmType));
+  const surfaceLabels = frequencyFirst(reports.map((entry) => entry.vulnerabilitySurface));
+  const representativeReport = reports[0] || null;
+  const representativeSummary =
+    representativeReport?.smokingGunExcerpt ||
+    representativeReport?.vulnerabilitySurface ||
+    representativeReport?.evidenceSummary ||
+    representativeReport?.finalResponseExcerpt ||
+    "";
+
+  return {
+    slug: skillId,
+    skillId: rawSkillId,
+    skillLabel: parts.nameLabel || rawSkillId,
+    ordinal: parts.ordinal,
+    owner: parts.owner,
+    ownerLabel: parts.ownerLabel,
+    skillName: parts.name,
+    sourceLink: compactText(skillMeta?.skill?.source_link),
+    skillHash: compactText(skillMeta?.skill?.skill_hash),
+    skillArchiveUrl: skillArchiveExists ? buildSkillArchiveUrl(skillId) : undefined,
+    skillArchivePath: skillArchiveExists ? skillArchivePath : undefined,
+    reportCount: reports.length,
+    successCount: reports.filter((entry) => entry.verdict === "attack_success").length,
+    modelCount: models.length,
+    models,
+    harmTypes,
+    surfaceLabels,
+    primaryHarmType: harmTypes[0] || "unknown",
+    primarySurfaceLabel: surfaceLabels[0] || "",
+    representativeReport,
+    representativeSummary,
+    reports,
+  };
 }
 
-export function getSkillVaultDatasetSections(records: SkillVaultRecord[]) {
-  return DATASET_ORDER.map((datasetId) => ({
-    id: datasetId,
-    records: records.filter((record) => record.datasets.includes(datasetId)),
-  })).filter((section) => section.records.length);
-}
+const loadSkillVaultData = cache(async () => {
+  const manifest = await readManifest();
+  const listedSkills = manifest.kept_skills?.length
+    ? manifest.kept_skills
+    : (await fs.readdir(DATA_ROOT, { withFileTypes: true }))
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort((left, right) => left.localeCompare(right));
 
-export function getDatasetLabel(datasetId: DatasetId, locale: Locale) {
-  const labels: Record<DatasetId, LocalizedText> = {
-    obvious: {
-      en: "Obvious",
-      zh: "Obvious",
-    },
-    contextual: {
-      en: "Contextual",
-      zh: "Contextual",
-    },
-    hot100: {
-      en: "Hot100",
-      zh: "Hot100",
-    },
+  const records = (
+    await Promise.all(listedSkills.map((skillId) => loadSkillRecord(skillId)))
+  ).filter((item): item is InternalSkillVaultRecord => Boolean(item));
+
+  const uniqueModels = uniqueSorted(records.flatMap((record) => record.models));
+  const uniqueHarmTypes = uniqueSorted(records.flatMap((record) => record.harmTypes));
+  const uniqueSurfaces = uniqueSorted(records.flatMap((record) => record.surfaceLabels));
+  const reportCount = records.reduce((sum, record) => sum + record.reportCount, 0);
+
+  const summary: SkillVaultSummary = {
+    uniqueSkillCount: records.length,
+    modelCount: uniqueModels.length,
+    totalRuns: reportCount,
+    caseEntryCount: reportCount,
+    datasetCount: records.length ? 1 : 0,
+    reportCount,
+    harmTypeCount: uniqueHarmTypes.length,
+    surfaceCount: uniqueSurfaces.length,
   };
 
-  return pick(locale, labels[datasetId]);
+  return {
+    manifest,
+    records,
+    recordMap: new Map(records.map((record) => [record.slug, record])),
+    summary,
+  };
+});
+
+export async function getSkillVaultSummary(): Promise<SkillVaultSummary> {
+  return (await loadSkillVaultData()).summary;
 }
 
-export function getVerdictLabel(verdict: ShowcaseVerdict, locale: Locale) {
-  const labels: Record<ShowcaseVerdict, LocalizedText> = {
+export async function listSkillVaultRecords(filters: SkillVaultFilters = {}) {
+  const { records } = await loadSkillVaultData();
+  const query = compactText(filters.q).toLowerCase();
+  const vuln = compactText(filters.vuln).toLowerCase();
+
+  return records
+    .filter((record) => {
+      if (query) {
+        const haystack = [
+          record.skillId,
+          record.skillLabel,
+          record.owner,
+          record.ownerLabel,
+          record.sourceLink,
+          ...record.models,
+          ...record.harmTypes,
+          ...record.surfaceLabels,
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(query)) {
+          return false;
+        }
+      }
+
+      if (vuln) {
+        const matched = [...record.harmTypes, ...record.surfaceLabels].some((value) =>
+          value.toLowerCase().includes(vuln)
+        );
+        if (!matched) {
+          return false;
+        }
+      }
+
+      return true;
+    })
+    .map(stripRecord);
+}
+
+export async function getSkillVaultRecord(skillId: string) {
+  const { recordMap } = await loadSkillVaultData();
+  const record = recordMap.get(skillId);
+  return record ? stripRecord(record) : null;
+}
+
+export async function getSkillVaultSkillArchive(skillId: string) {
+  const { recordMap } = await loadSkillVaultData();
+  const record = recordMap.get(skillId);
+  if (!record?.skillArchivePath || !record.skillArchiveUrl) {
+    return null;
+  }
+  return {
+    path: record.skillArchivePath,
+    fileName: `${record.skillId}.zip`,
+  };
+}
+
+export async function getSkillVaultReportAsset(skillId: string, fileName: string) {
+  const { recordMap } = await loadSkillVaultData();
+  const record = recordMap.get(skillId);
+  const report = record?.reports.find((entry) => entry.fileName === fileName);
+  if (!report) {
+    return null;
+  }
+  return {
+    path: report.reportPath,
+    fileName: report.fileName,
+  };
+}
+
+export function getVerdictLabel(verdict: string, locale: Locale) {
+  const normalized = compactText(verdict).toLowerCase();
+  const labels: Record<string, LocalizedText> = {
     attack_success: {
       en: "attack success",
       zh: "攻击成功",
@@ -359,9 +530,19 @@ export function getVerdictLabel(verdict: ShowcaseVerdict, locale: Locale) {
       en: "technical",
       zh: "技术失败",
     },
+    unknown: {
+      en: "unknown",
+      zh: "未知",
+    },
   };
 
-  return pick(locale, labels[verdict]);
+  return pick(
+    locale,
+    labels[normalized] || {
+      en: getVerdictLabelFallback(normalized || "unknown"),
+      zh: getVerdictLabelFallback(normalized || "unknown"),
+    }
+  );
 }
 
 export function getSkillVaultCopy(locale: Locale) {
@@ -372,55 +553,43 @@ export function getSkillVaultCopy(locale: Locale) {
     }),
     pageName: "Skill Vault",
     heroBadge: pick(locale, {
-      en: "SkillAttack classification view",
-      zh: "SkillAttack 分类视图",
+      en: "Hot100 real-harm slice",
+      zh: "Hot100 真实危害切片",
     }),
     title: pick(locale, {
       en: "Skill Vault",
       zh: "Skill Vault",
     }),
     body: pick(locale, {
-      en: "Browse vulnerability-bearing skills by SkillAttack bucket. Each record shows observed vuln types, successful attack coverage, and the lane/round that first landed a successful run.",
-      zh: "按 SkillAttack 的分类体系浏览带漏洞的 skills。每条记录都会展示漏洞类型、成功攻击覆盖情况，以及首次打成成功的 lane / round。",
+      en: "Browse SkillAtlas by skill. Each card corresponds to one skill directory and aggregates the run-level reports, main risk types, and representative evidence observed in tmpreport_hot100_real.",
+      zh: "按 skill 浏览 SkillAtlas。每张卡片对应一个 skill 目录，聚合展示 tmpreport_hot100_real 中的 run-level 报告、主要风险类型和代表性证据。",
     }),
     stats: {
       trackedSkills: pick(locale, {
         en: "Tracked skills",
-        zh: "已追踪 skills",
+        zh: "已收录技能",
       }),
-      caseEntries: pick(locale, {
-        en: "Case entries",
-        zh: "案例条目",
-      }),
-      totalRuns: pick(locale, {
-        en: "Total runs",
-        zh: "总运行数",
+      reports: pick(locale, {
+        en: "Run reports",
+        zh: "运行报告",
       }),
       models: pick(locale, {
         en: "Models covered",
-        zh: "覆盖模型数",
+        zh: "覆盖模型",
+      }),
+      riskTypes: pick(locale, {
+        en: "Risk types",
+        zh: "风险类型",
       }),
     },
     filters: {
       query: pick(locale, {
-        en: "search skill or vuln",
-        zh: "搜索 skill 或漏洞",
-      }),
-      dataset: pick(locale, {
-        en: "dataset bucket",
-        zh: "分类桶",
+        en: "search skill, owner, or source link",
+        zh: "搜索 skill、作者或来源链接",
       }),
       vuln: pick(locale, {
-        en: "vulnerability type",
-        zh: "漏洞类型",
-      }),
-      model: pick(locale, {
-        en: "model",
-        zh: "模型",
-      }),
-      allDatasets: pick(locale, {
-        en: "all buckets",
-        zh: "全部分类",
+        en: "risk type or surface",
+        zh: "风险类型或攻击面",
       }),
       apply: pick(locale, {
         en: "Apply filters",
@@ -428,13 +597,33 @@ export function getSkillVaultCopy(locale: Locale) {
       }),
     },
     labels: {
-      successCoverage: pick(locale, {
-        en: "success coverage",
-        zh: "成功覆盖",
+      reports: pick(locale, {
+        en: "reports",
+        zh: "报告",
       }),
-      representativeWin: pick(locale, {
-        en: "representative win",
-        zh: "代表性成功",
+      models: pick(locale, {
+        en: "models",
+        zh: "模型",
+      }),
+      riskTypes: pick(locale, {
+        en: "risk types",
+        zh: "风险类型",
+      }),
+      sourceLink: pick(locale, {
+        en: "source link",
+        zh: "来源链接",
+      }),
+      representativeCase: pick(locale, {
+        en: "representative case",
+        zh: "代表性案例",
+      }),
+      representativeEvidence: pick(locale, {
+        en: "representative evidence",
+        zh: "代表性证据",
+      }),
+      successCoverage: pick(locale, {
+        en: "successful reports",
+        zh: "成功报告",
       }),
       lane: pick(locale, {
         en: "lane",
@@ -444,97 +633,117 @@ export function getSkillVaultCopy(locale: Locale) {
         en: "round",
         zh: "轮次",
       }),
-      datasets: pick(locale, {
-        en: "datasets",
-        zh: "数据集",
-      }),
-      models: pick(locale, {
-        en: "models",
-        zh: "模型",
-      }),
-      vulnTypes: pick(locale, {
-        en: "vulnerability types",
-        zh: "漏洞类型",
-      }),
-      totalRuns: pick(locale, {
-        en: "total runs",
-        zh: "总运行数",
-      }),
-      attackSuccess: pick(locale, {
-        en: "attack success",
-        zh: "攻击成功",
-      }),
-      technical: pick(locale, {
-        en: "technical",
-        zh: "技术失败",
-      }),
-      ignored: pick(locale, {
-        en: "ignored",
-        zh: "已忽略",
-      }),
-      detail: pick(locale, {
-        en: "Open detail",
-        zh: "查看详情",
-      }),
-      empty: pick(locale, {
-        en: "No skills match the current filters.",
-        zh: "当前筛选条件下没有匹配的 skill。",
-      }),
-      noRepresentative: pick(locale, {
-        en: "No representative success run extracted yet.",
-        zh: "暂时还没有提取到代表性成功运行。",
-      }),
-      summaryJson: pick(locale, {
-        en: "Summary JSON",
-        zh: "Summary JSON",
-      }),
-      artifactDirectory: pick(locale, {
-        en: "Artifact directory",
-        zh: "Artifact 目录",
-      }),
-      artifactUnavailable: pick(locale, {
-        en: "Artifacts unavailable for this entry.",
-        zh: "这条记录没有附带 artifact 目录。",
-      }),
-      executionTraces: pick(locale, {
-        en: "Execution traces",
-        zh: "执行轨迹",
-      }),
-      executionBody: pick(locale, {
-        en: "Per-model and per-dataset entries from the current SkillAttack showcase snapshot.",
-        zh: "当前 SkillAttack showcase 快照里，按模型和数据集拆开的执行记录。",
-      }),
       confidence: pick(locale, {
         en: "confidence",
         zh: "置信度",
       }),
-      score: pick(locale, {
-        en: "score",
-        zh: "分数",
-      }),
-      successReason: pick(locale, {
-        en: "observed evidence",
-        zh: "观测到的证据",
+      owner: pick(locale, {
+        en: "owner",
+        zh: "作者",
       }),
       skillId: pick(locale, {
         en: "skill id",
         zh: "skill id",
       }),
-      openShowcase: pick(locale, {
-        en: "Open SkillAttack showcase",
-        zh: "打开 SkillAttack 展示页",
+      primaryRisk: pick(locale, {
+        en: "primary risk",
+        zh: "主要风险",
       }),
-      openRepo: pick(locale, {
-        en: "Open SkillAttack repo",
-        zh: "打开 SkillAttack 仓库",
+      primarySurface: pick(locale, {
+        en: "primary surface",
+        zh: "主要攻击面",
       }),
-      openArxiv: pick(locale, {
-        en: "Open arXiv placeholder",
-        zh: "打开 arXiv 占位链接",
+      reportTrail: pick(locale, {
+        en: "report trail",
+        zh: "报告轨迹",
       }),
-      vaultIndex: pick(locale, {
+      reportTrailBody: pick(locale, {
+        en: "Run-level reports captured for this skill. Each entry links to the raw JSON and highlights the prompt, evidence, and model behavior that mattered most.",
+        zh: "这个 skill 下捕获的 run-level 报告。每条记录都提供原始 JSON，并突出展示关键提示词、证据和模型行为。",
+      }),
+      harmfulPrompt: pick(locale, {
+        en: "harmful prompt",
+        zh: "攻击提示词",
+      }),
+      finalResponse: pick(locale, {
+        en: "final response excerpt",
+        zh: "最终响应摘录",
+      }),
+      smokingGun: pick(locale, {
+        en: "smoking gun",
+        zh: "关键证据",
+      }),
+      observedPaths: pick(locale, {
+        en: "observed paths",
+        zh: "观测路径",
+      }),
+      predictedTools: pick(locale, {
+        en: "predicted tools",
+        zh: "预测工具",
+      }),
+      evidenceSummary: pick(locale, {
+        en: "evidence summary",
+        zh: "证据摘要",
+      }),
+      rawReport: pick(locale, {
+        en: "Raw report JSON",
+        zh: "原始报告 JSON",
+      }),
+      viewRawReport: pick(locale, {
+        en: "View raw JSON",
+        zh: "查看原始 JSON",
+      }),
+      rawReportPanel: pick(locale, {
+        en: "Raw JSON panel",
+        zh: "原始 JSON 面板",
+      }),
+      rawJsonLoading: pick(locale, {
+        en: "Loading raw JSON...",
+        zh: "正在加载原始 JSON...",
+      }),
+      rawJsonError: pick(locale, {
+        en: "Could not load this report right now.",
+        zh: "暂时无法加载这份报告。",
+      }),
+      closePanel: pick(locale, {
+        en: "Close",
+        zh: "关闭",
+      }),
+      openInNewTab: pick(locale, {
+        en: "Open in new tab",
+        zh: "新标签打开",
+      }),
+      downloadSkill: pick(locale, {
+        en: "Download skill.zip",
+        zh: "下载 skill.zip",
+      }),
+      noArchive: pick(locale, {
+        en: "skill.zip unavailable",
+        zh: "skill.zip 不可用",
+      }),
+      noRepresentative: pick(locale, {
+        en: "No representative report extracted yet.",
+        zh: "暂时还没有提取到代表性报告。",
+      }),
+      empty: pick(locale, {
+        en: "No skills match the current filters.",
+        zh: "当前筛选条件下没有匹配的 skill。",
+      }),
+      backToVault: pick(locale, {
         en: "Back to Skill Vault",
         zh: "返回 Skill Vault",
+      }),
+      generatedAt: pick(locale, {
+        en: "generated at",
+        zh: "生成时间",
+      }),
+      provider: pick(locale, {
+        en: "provider",
+        zh: "提供方",
+      }),
+      openSource: pick(locale, {
+        en: "Open source link",
+        zh: "打开来源链接",
       }),
     },
   };

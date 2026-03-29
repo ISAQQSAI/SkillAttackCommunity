@@ -11,7 +11,7 @@ export async function CommunityHomePage() {
   const dict = getDictionary(locale);
   const viewer = await getViewer();
   const vaultCopy = getSkillVaultCopy(locale);
-  const vaultSummary = getSkillVaultSummary();
+  const vaultSummary = await getSkillVaultSummary();
   const snapshot = await getHomeSnapshot();
   const backend = await getBackendSummary();
   const latest = await listPublicFindingViews();
@@ -23,19 +23,19 @@ export async function CommunityHomePage() {
     title: vaultCopy.pageName,
     body:
       locale === "zh"
-        ? "按 SkillAttack 的分类体系浏览每个 skill 的漏洞类型、成功 lane、轮次与执行证据。"
-        : "Browse each skill by SkillAttack bucket, vulnerability type, successful lane, round, and evidence links.",
+        ? "按 skill 浏览 Hot100 真实危害切片，查看每个 skill 的报告数量、主要风险类型和代表性证据。"
+        : "Browse the Hot100 real-harm slice by skill, including report count, main risk types, and representative evidence.",
     stats:
       locale === "zh"
         ? [
             `${vaultSummary.uniqueSkillCount} 个 skills`,
-            `${vaultSummary.caseEntryCount} 条 case entries`,
-            `${vaultSummary.totalRuns} 次 runs`,
+            `${vaultSummary.reportCount} 份 reports`,
+            `${vaultSummary.harmTypeCount} 类 risks`,
           ]
         : [
             `${vaultSummary.uniqueSkillCount} skills`,
-            `${vaultSummary.caseEntryCount} case entries`,
-            `${vaultSummary.totalRuns} runs`,
+            `${vaultSummary.reportCount} reports`,
+            `${vaultSummary.harmTypeCount} risk types`,
           ],
     href: "/skills",
   };

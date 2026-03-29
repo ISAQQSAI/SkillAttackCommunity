@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SkillAttackCommunity",
-  description: "Half-open community for submitted vulnerability reports, reviewer verification, and public-safe case publication.",
+  title: "SkillAtlas",
+  description: "Skill Attack Trace Library for Agent Safety.",
 };
 
 export default async function RootLayout({

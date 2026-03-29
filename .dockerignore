@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.gitignore
+var
+uploads
+npm-debug.log*
+.env
+.env.local
+.env.production

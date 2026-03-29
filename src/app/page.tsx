@@ -11,23 +11,23 @@ export default async function LandingPage() {
   const locale = await getLocale();
   const dict = getDictionary(locale);
   const snapshot = await getHomeSnapshot();
-  const vaultSummary = getSkillVaultSummary();
+  const vaultSummary = await getSkillVaultSummary();
   const payload = (snapshot?.payload || {}) as {
     publishedCount?: number;
     reporterCount?: number;
   };
 
   const landingCopy = {
-    badge: locale === "zh" ? "SkillAttack 社区" : "SkillAttack community",
-    title: "SkillAttackCommunity",
+    badge: locale === "zh" ? "SkillAtlas 安全轨迹库" : "SkillAtlas for agent safety",
+    title: "SkillAtlas",
     slogan:
       locale === "zh"
-        ? "提交、审核并发布 Agent Skill 漏洞报告。"
-        : "Submit, review, and publish vulnerability reports for agent skills.",
+        ? "Skill Attack Trace Library for Agent Safety."
+        : "Skill Attack Trace Library for Agent Safety.",
     body:
       locale === "zh"
-        ? "一个以证据为中心的半开放社区，沉淀漏洞报告、复现步骤、关键证据与公开案例。"
-        : "A half-open, evidence-first community for collecting findings, reproduction steps, smoking guns, and public-safe case pages.",
+        ? "一个以证据为中心的安全轨迹库，用来沉淀漏洞报告、复现步骤、关键证据与可公开案例。"
+        : "An evidence-first trace library for agent safety, collecting findings, reproduction steps, smoking guns, and public-safe case pages.",
     startNowCta: "Start Now",
     github: locale === "zh" ? "GitHub" : "GitHub",
     showcase: locale === "zh" ? "展示" : "Showcase",
@@ -75,10 +75,11 @@ export default async function LandingPage() {
 
             <div className="landing-logo-shell rounded-[1.9rem] border border-slate-200/80 bg-white p-3.5 shadow-[0_20px_60px_rgba(15,23,42,0.24)]">
               <Image
-                src="/skillattack-logo.png"
-                alt="SkillAttack logo"
+                src="/skillattack-logo.png?v=20260329"
+                alt="SkillAtlas logo"
                 width={208}
                 height={208}
+                unoptimized
                 className="h-28 w-28 object-contain sm:h-32 sm:w-32 lg:h-40 lg:w-40"
                 priority
               />

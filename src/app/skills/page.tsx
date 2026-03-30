@@ -1,7 +1,17 @@
 import Link from "next/link";
 
+import {
+  actionButtonClass,
+  EmptyState,
+  InsetCard,
+  PageHero,
+  PageStat,
+} from "@/components/page-chrome";
 import { getLocale } from "@/lib/server/locale";
-import { getSkillVaultCopy, getSkillVaultSummary, listSkillVaultRecords } from "@/lib/skill-vault";
+import {
+  getPublicSkillLibrarySummary,
+  listPublicSkills,
+} from "@/lib/server/public-skills";
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -15,63 +25,132 @@ function formatNumber(locale: string, value: number, suffix?: string) {
   return `${formatted}${suffix || ""}`;
 }
 
+function formatDate(locale: string, value?: string | Date | null) {
+  if (!value) {
+    return "-";
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+    dateStyle: "medium",
+  }).format(date);
+}
+
 export default async function SkillsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const locale = await getLocale();
-  const copy = getSkillVaultCopy(locale);
   const params = await searchParams;
   const filters = {
     q: firstParam(params.q),
     vuln: firstParam(params.vuln),
   };
-  const summary = await getSkillVaultSummary();
-  const records = await listSkillVaultRecords(filters);
+  const [summary, records] = await Promise.all([
+    getPublicSkillLibrarySummary(),
+    listPublicSkills(filters),
+  ]);
+
+  const copy =
+    locale === "zh"
+      ? {
+          badge: "Skill-first 公共库",
+          title: "公开技能案例库",
+          body:
+            "这里把已发布的公开案例按 skill 聚合展示。点进单个 skill 详情页后，可以继续查看它下面的公开案例、风险类型和审核结论。",
+          stats: {
+            skills: "公开技能",
+            cases: "公开案例",
+            findings: "公开 findings",
+            risks: "风险类型",
+          },
+          filters: {
+            query: "按 skill / owner / model 搜索",
+            vuln: "按风险类型筛选",
+            apply: "筛选",
+          },
+          card: {
+            cases: "案例",
+            findings: "Findings",
+            models: "模型",
+            primaryRisk: "主要风险",
+            successCoverage: "成功判定",
+            lastUpdated: "最近更新",
+            empty: "还没有已发布的技能案例",
+            emptyBody: "等管理员审核并发布后，这里会出现按 skill 聚合的公开页。",
+            upload: "上传新的 bundle",
+          },
+        }
+      : {
+          badge: "Skill-first public library",
+          title: "Public skill library",
+          body:
+            "Published public-safe cases are grouped by skill here. Open a skill detail page to inspect its case pages, risk patterns, and admin verification notes.",
+          stats: {
+            skills: "Public skills",
+            cases: "Public cases",
+            findings: "Published findings",
+            risks: "Risk types",
+          },
+          filters: {
+            query: "Search by skill / owner / model",
+            vuln: "Filter by risk type",
+            apply: "Apply",
+          },
+          card: {
+            cases: "cases",
+            findings: "Findings",
+            models: "Models",
+            primaryRisk: "Primary risk",
+            successCoverage: "Successful verdicts",
+            lastUpdated: "Last updated",
+            empty: "No public skills yet",
+            emptyBody: "Skill-grouped public pages will appear here after admin approval.",
+            upload: "Upload a bundle",
+          },
+        };
 
   return (
     <div className="grid gap-8">
-      <section className="overflow-hidden rounded-[2rem] bg-[radial-gradient(circle_at_top_left,_rgba(203,255,122,0.18),_transparent_26%),radial-gradient(circle_at_top_right,_rgba(255,104,71,0.22),_transparent_24%),linear-gradient(135deg,_#0f172a,_#1e293b_55%,_#4f2b29)] p-8 text-white shadow-[0_32px_120px_rgba(15,23,42,0.28)]">
-        <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:items-end">
-          <div className="grid gap-5">
-            <div className="w-fit rounded-full border border-white/15 bg-white/8 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/75">
-              {copy.heroBadge}
-            </div>
-            <h1 className="text-5xl font-semibold tracking-[-0.08em]">{copy.title}</h1>
-            <p className="max-w-3xl text-lg leading-8 text-white/78">{copy.body}</p>
-          </div>
-          <div className="grid gap-3 rounded-[1.6rem] border border-white/10 bg-white/8 p-5">
+      <PageHero
+        tone="dark"
+        eyebrow={copy.badge}
+        title={copy.title}
+        description={copy.body}
+        aside={
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             {[
-              { label: copy.stats.trackedSkills, value: summary.uniqueSkillCount },
-              { label: copy.stats.reports, value: summary.reportCount },
-              { label: copy.stats.riskTypes, value: summary.harmTypeCount },
-              { label: copy.labels.primarySurface, value: summary.surfaceCount },
+              { label: copy.stats.skills, value: summary.uniqueSkillCount },
+              { label: copy.stats.cases, value: summary.caseCount },
+              { label: copy.stats.findings, value: summary.findingCount },
+              { label: copy.stats.risks, value: summary.harmTypeCount },
             ].map((item) => (
-              <div key={item.label} className="rounded-3xl bg-white/8 p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/60">{item.label}</div>
-                <div className="mt-3 text-3xl font-semibold">{formatNumber(locale, item.value)}</div>
-              </div>
+              <PageStat
+                key={item.label}
+                tone="dark"
+                label={item.label}
+                value={formatNumber(locale, item.value)}
+              />
             ))}
           </div>
-        </div>
-      </section>
+        }
+      />
 
-      <section className="rounded-[2rem] border border-black/10 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+      <section className="rounded-[2rem] border border-black/8 bg-white/88 p-6 shadow-[0_24px_72px_rgba(15,23,42,0.08)]">
         <form className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <input
             name="q"
             defaultValue={filters.q}
             placeholder={copy.filters.query}
-            className="rounded-2xl border border-black/10 px-4 py-3 text-sm"
+            className="w-full rounded-[1.15rem] border border-black/10 bg-white/92 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70"
           />
           <input
             name="vuln"
             defaultValue={filters.vuln}
             placeholder={copy.filters.vuln}
-            className="rounded-2xl border border-black/10 px-4 py-3 text-sm"
+            className="w-full rounded-[1.15rem] border border-black/10 bg-white/92 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70"
           />
-          <button className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white">
+          <button className={actionButtonClass("primary")}>
             {copy.filters.apply}
           </button>
         </form>
@@ -81,9 +160,9 @@ export default async function SkillsPage({
         <section className="grid gap-4 lg:grid-cols-2">
           {records.map((record) => (
             <Link
-              key={record.slug}
-              href={`/skills/${record.slug}`}
-              className="grid gap-5 rounded-[1.7rem] border border-black/10 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)] transition hover:-translate-y-0.5"
+              key={record.skillId}
+              href={`/skills/${encodeURIComponent(record.skillId)}`}
+              className="group grid gap-5 rounded-[1.8rem] border border-black/8 bg-white/88 p-6 shadow-[0_24px_72px_rgba(15,23,42,0.08)] transition hover:-translate-y-1"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
@@ -94,48 +173,49 @@ export default async function SkillsPage({
                   <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-800">{record.primaryHarmType}</span>
                 </div>
                 <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-white">
-                  {record.reportCount} {copy.labels.reports}
+                  {record.caseCount} {copy.card.cases}
                 </span>
               </div>
 
               <div className="grid gap-2">
                 <div>
-                  <h2 className="text-2xl font-semibold">{record.skillLabel}</h2>
+                  <h2 className="text-2xl font-semibold tracking-[-0.04em] transition group-hover:text-slate-950">{record.skillLabel}</h2>
                   <p className="mt-2 text-sm text-slate-500">{record.skillId}</p>
                 </div>
                 {record.sourceLink ? (
                   <p className="text-sm leading-7 text-slate-600">{record.sourceLink}</p>
                 ) : null}
                 <p className="text-sm leading-7 text-slate-600">
-                  {record.representativeSummary || copy.labels.noRepresentative}
+                  {record.representativeSummary || "-"}
                 </p>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-2xl bg-slate-50 p-4 text-sm">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.labels.representativeCase}</div>
-                  {record.representativeReport ? (
-                    <div className="mt-2 text-slate-700">
-                      <div className="text-sm">{record.representativeReport.harmType}</div>
-                      <div className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-                        {copy.labels.lane} {record.representativeReport.lane || "-"} · {copy.labels.round} {record.representativeReport.round || "-"}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-slate-500">{copy.labels.noRepresentative}</div>
-                  )}
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-4 text-sm">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.labels.successCoverage}</div>
+                <InsetCard className="text-sm">
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.card.primaryRisk}</div>
+                  <div className="mt-2 text-slate-700">{record.primaryHarmType}</div>
+                </InsetCard>
+                <InsetCard className="text-sm">
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.card.successCoverage}</div>
                   <div className="mt-2 text-slate-700">
-                    {record.successCount}/{record.reportCount}
+                    {record.successCount}/{record.findingCount}
                   </div>
-                  <div className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">{record.primaryHarmType}</div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-4 text-sm">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.labels.primarySurface}</div>
-                  <div className="mt-2 text-slate-700">{record.primarySurfaceLabel || "-"}</div>
-                </div>
+                </InsetCard>
+                <InsetCard className="text-sm">
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.card.lastUpdated}</div>
+                  <div className="mt-2 text-slate-700">{formatDate(locale, record.latestPublishedAt)}</div>
+                </InsetCard>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <InsetCard className="text-sm">
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.card.findings}</div>
+                  <div className="mt-2 text-slate-700">{record.findingCount}</div>
+                </InsetCard>
+                <InsetCard className="text-sm">
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.card.models}</div>
+                  <div className="mt-2 text-slate-700">{record.modelCount}</div>
+                </InsetCard>
               </div>
 
               <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
@@ -149,9 +229,15 @@ export default async function SkillsPage({
           ))}
         </section>
       ) : (
-        <div className="rounded-[1.6rem] border border-dashed border-black/15 bg-white/70 p-10 text-sm text-slate-600">
-          {copy.labels.empty}
-        </div>
+        <EmptyState
+          title={copy.card.empty}
+          body={copy.card.emptyBody}
+          action={
+            <Link href="/submit" className={actionButtonClass("primary")}>
+              {copy.card.upload}
+            </Link>
+          }
+        />
       )}
     </div>
   );

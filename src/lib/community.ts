@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const USER_ROLES = ["reporter", "reviewer", "admin"] as const;
+export const USER_ROLES = ["admin"] as const;
 export const FINDING_STATUSES = [
   "draft",
   "submitted",
@@ -211,6 +211,7 @@ export interface Viewer {
   email?: string;
   image?: string;
   isDemo?: boolean;
+  isLocal?: boolean;
 }
 
 const stringListSchema = z

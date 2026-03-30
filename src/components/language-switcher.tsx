@@ -28,7 +28,7 @@ export function LanguageSwitcher({ locale }: { locale: Locale }) {
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-full border border-black/10 bg-white px-2 py-2 text-xs">
+    <div className="flex items-center gap-2 rounded-full border border-black/8 bg-white/82 px-2 py-2 text-xs shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
       {(["en", "zh"] as const).map((item) => {
         const label = item === "en" ? dict.shell.localeEn : dict.shell.localeZh;
         return (
@@ -37,9 +37,12 @@ export function LanguageSwitcher({ locale }: { locale: Locale }) {
             type="button"
             onClick={() => switchLocale(item)}
             disabled={Boolean(working)}
-            className={`rounded-full px-3 py-1.5 text-sm transition ${
-              locale === item ? "bg-slate-950 text-white" : "text-slate-700 hover:bg-slate-100"
+            className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+              locale === item
+                ? "bg-slate-950 text-white !text-white shadow-[0_12px_28px_rgba(15,23,42,0.12)] hover:!text-white"
+                : "text-slate-700 hover:bg-slate-100"
             } disabled:opacity-60`}
+            style={locale === item ? { color: "#ffffff" } : undefined}
           >
             {working === item ? dict.shell.switching : label}
           </button>

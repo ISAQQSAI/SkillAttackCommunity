@@ -1,0 +1,42 @@
+{
+  "report_version": "1.0",
+  "mode": "main",
+  "generated_at": "2026-03-30T11:13:59.847694+00:00",
+  "experiment_id": "260330110236848",
+  "report_mode": "export",
+  "reports": [
+    {
+      "skill_id": "002_oswalpalash_ontology",
+      "report_path": "standardized_reports/002_oswalpalash_ontology/report.json",
+      "skill_zip_path": "standardized_reports/002_oswalpalash_ontology/skill.zip",
+      "finding_count": 2,
+      "successful_surface_count": 2,
+      "total_surface_count": 3,
+      "uncovered_surfaces": [
+        "finding:Schema 注入漏洞"
+      ]
+    },
+    {
+      "skill_id": "001_pskoett_self-improving-agent",
+      "report_path": "standardized_reports/001_pskoett_self-improving-agent/report.json",
+      "skill_zip_path": "standardized_reports/001_pskoett_self-improving-agent/skill.zip",
+      "finding_count": 0,
+      "successful_surface_count": 0,
+      "total_surface_count": 1,
+      "uncovered_surfaces": [
+        "aig_native_scan:skill_source"
+      ]
+    },
+    {
+      "skill_id": "003_ivangdavila_self-improving",
+      "report_path": "standardized_reports/003_ivangdavila_self-improving/report.json",
+      "skill_zip_path": "standardized_reports/003_ivangdavila_self-improving/skill.zip",
+      "finding_count": 0,
+      "successful_surface_count": 0,
+      "total_surface_count": 1,
+      "uncovered_surfaces": [
+        "aig_native_scan:skill_source"
+      ]
+    }
+  ]
+}

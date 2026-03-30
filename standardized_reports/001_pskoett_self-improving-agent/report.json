@@ -1,0 +1,23 @@
+{
+  "report_version": "1.0",
+  "skill": {
+    "skill_id": "001_pskoett_self-improving-agent",
+    "skill_zip": "skill.zip",
+    "skill_hash": "b42ac2108113a2bf7bf1e80ec85bf63903ba33062d444125bdab051cb5b4c622",
+    "source_link": ""
+  },
+  "findings": [],
+  "other_info": {
+    "generated_at": "2026-03-30T11:13:59.847694+00:00",
+    "finding_count": 0,
+    "surface_summary": {
+      "total_surface_count": 1,
+      "raw_surface_count": 1,
+      "successful_surface_count": 0,
+      "successful_surfaces": [],
+      "uncovered_surfaces": [
+        "aig_native_scan:skill_source"
+      ]
+    }
+  }
+}

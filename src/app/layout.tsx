@@ -3,9 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getDictionary } from "@/lib/i18n";
-import { getViewer, isGithubAuthEnabled } from "@/lib/server/auth";
+import { getViewer } from "@/lib/server/auth";
 import { getLocale } from "@/lib/server/locale";
-import { getBackendSummary } from "@/lib/server/store";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "SkillAtlas",
-  description: "Skill Attack Trace Library for Agent Safety.",
+  description: "ATLAS — Attack Trace Library for Agent Skills.",
 };
 
 export default async function RootLayout({
@@ -29,7 +28,6 @@ export default async function RootLayout({
 }>) {
   const locale = await getLocale();
   const viewer = await getViewer();
-  const backend = await getBackendSummary();
   const dict = getDictionary(locale);
 
   return (
@@ -40,8 +38,6 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <AppShell
           viewer={viewer}
-          backendMode={backend.mode}
-          githubEnabled={isGithubAuthEnabled()}
           locale={locale}
           brand={dict.shell.brand}
         >

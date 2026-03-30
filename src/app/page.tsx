@@ -1,40 +1,32 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { getDictionary } from "@/lib/i18n";
 import { getLocale } from "@/lib/server/locale";
-import { getHomeSnapshot } from "@/lib/server/store";
+import { getCommunitySnapshot } from "@/lib/server/report-submissions";
 import { skillAttackLinks } from "@/lib/skillattack-links";
-import { getSkillVaultSummary } from "@/lib/skill-vault";
 
 export default async function LandingPage() {
   const locale = await getLocale();
-  const dict = getDictionary(locale);
-  const snapshot = await getHomeSnapshot();
-  const vaultSummary = await getSkillVaultSummary();
-  const payload = (snapshot?.payload || {}) as {
-    publishedCount?: number;
-    reporterCount?: number;
-  };
+  const snapshot = await getCommunitySnapshot();
 
   const landingCopy = {
-    badge: locale === "zh" ? "SkillAtlas 安全轨迹库" : "SkillAtlas for agent safety",
+    badge: locale === "zh" ? "SkillAtlas 安全案例社区" : "SkillAtlas public-safe case community",
     title: "SkillAtlas",
     slogan:
       locale === "zh"
-        ? "Skill Attack Trace Library for Agent Safety."
-        : "Skill Attack Trace Library for Agent Safety.",
+        ? "Guest 上传，管理员审核，社区展示安全版报告。"
+        : "Guest upload, admin review, public-safe case publishing.",
     body:
       locale === "zh"
-        ? "一个以证据为中心的安全轨迹库，用来沉淀漏洞报告、复现步骤、关键证据与可公开案例。"
-        : "An evidence-first trace library for agent safety, collecting findings, reproduction steps, smoking guns, and public-safe case pages.",
-    startNowCta: "Start Now",
+        ? "一个面向 Agent/Skill 安全的社区工作流：guest 上传 report bundle，服务端先解析并脱敏，管理员审核通过后再公开展示。"
+        : "A community workflow for agent and skill safety: guests upload report bundles, the server parses and redacts them, and admins decide which public-safe cases to publish.",
+    startNowCta: locale === "zh" ? "进入社区" : "Enter Community",
     github: locale === "zh" ? "GitHub" : "GitHub",
     showcase: locale === "zh" ? "展示" : "Showcase",
     paper: locale === "zh" ? "Paper" : "Paper",
-    trackedSkills: locale === "zh" ? "已追踪 skills" : "Tracked skills",
+    trackedSkills: locale === "zh" ? "预览待确认" : "Preview ready",
     published: locale === "zh" ? "已发布案例" : "Published cases",
-    reporters: locale === "zh" ? "提交者" : "Reporters",
+    reporters: locale === "zh" ? "待审核提交" : "Pending review",
   };
 
   const externalLinks = [
@@ -75,7 +67,7 @@ export default async function LandingPage() {
 
             <div className="landing-logo-shell rounded-[1.9rem] border border-slate-200/80 bg-white p-3.5 shadow-[0_20px_60px_rgba(15,23,42,0.24)]">
               <Image
-                src="/skillattack-logo.png?v=20260329"
+                src="/skillattack-logo-1.png"
                 alt="SkillAtlas logo"
                 width={208}
                 height={208}
@@ -124,19 +116,25 @@ export default async function LandingPage() {
           </div>
         </div>
 
-        <div className="mt-5 flex justify-center pb-1 lg:mt-6">
-          <div className="landing-stats-line flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-white/42 sm:text-[15px]">
-            <span>
-              {vaultSummary.uniqueSkillCount} {landingCopy.trackedSkills}
-            </span>
-            <span className="text-white/22">·</span>
-            <span>
-              {payload.publishedCount || 0} {landingCopy.published}
-            </span>
-            <span className="text-white/22">·</span>
-            <span>
-              {payload.reporterCount || 0} {landingCopy.reporters}
-            </span>
+        <div className="mt-8 flex justify-center pb-1 lg:mt-10">
+          <div className="grid w-full max-w-4xl gap-3 sm:grid-cols-3">
+            {[
+              { label: landingCopy.trackedSkills, value: snapshot.previewReadyCount },
+              { label: landingCopy.published, value: snapshot.publishedCount },
+              { label: landingCopy.reporters, value: snapshot.pendingReviewCount },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="landing-stat-card rounded-[1.35rem] border border-white/10 bg-white/[0.05] px-4 py-4 text-center backdrop-blur-sm"
+              >
+                <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/48">
+                  {item.label}
+                </div>
+                <div className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-white">
+                  {item.value}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

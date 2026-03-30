@@ -1,111 +1,85 @@
 # SkillAtlas
 
-SkillAtlas — Skill Attack Trace Library for Agent Safety.
+SkillAtlas is a public-safe report community for agent and skill security.
 
-Half-open community for submitting audited vulnerability reports, reviewing evidence, and publishing public-safe case pages.
+The production workflow is:
 
-This MVP is intentionally **report-first**:
+- guest uploads a `report_bundle.zip`
+- the server parses and redacts it into a structured preview
+- guest confirms the preview and formally submits it
+- admin reviews the original bundle plus the sanitized preview from a local-only review backend
+- approved submissions become public-safe case pages
 
-- reporters submit a structured **finding report**
-- reviewers triage, dedupe, redact, and verify evidence
-- publishing creates a standardized public case page
-- public pages aggregate findings by reporter, dataset, vendor, skill, and model
+Raw bundles, raw JSON, full trajectories, and skill archives are not exposed in the public UI.
 
-Users do **not** upload a skill for the platform to audit. They upload an already-audited **vulnerability report** plus supporting artifacts.
+## Core Product Flow
 
-## What Ships In This MVP
+- Guest submission
+  - upload a standardized zip bundle
+  - inspect the redacted preview
+  - submit without registering
+  - receive a submission ID and tracking token
+- Admin review
+  - open the review queue
+  - inspect sanitized findings and download the original bundle
+  - approve, reject, publish, and unpublish
+- Public community
+  - browse published skills first
+  - open skill detail pages and their published case pages
+  - read structured finding summaries
+  - never receive raw traces or raw report files
 
-- Public area
-  - home dashboard
-  - published findings index
-  - finding detail pages
-  - leaderboards
-  - dataset rollups
-  - model rollups
-- Submission area
-  - authenticated draft creation
-  - structured report form
-  - artifact uploads
-  - draft save and submit-for-review flow
-  - reporter status pages for submitted reports
-- Review area
-  - reviewer queue
-  - duplicate suggestions
-  - artifact previews
-  - redaction flags
-  - reviewer verification
-  - publish and unpublish controls
-- Worker
-  - parses artifact bundles
-  - suggests duplicates
-  - rebuilds public case payloads
-  - refreshes aggregate snapshots
-
-## Current Runtime Model
-
-The repository is split into two layers:
-
-- **schema-ready layer**: Prisma schema for a future Postgres-backed deployment
-- **demo runtime layer**: file-backed state in `var/community-state.json`
-
-That means:
-
-- the app is runnable locally without standing up Postgres first
-- the core community flows already work end-to-end
-- the Prisma schema and job model are already defined for later persistence migration
-
-## Stack
+## Runtime Stack
 
 - Next.js 16
 - TypeScript
 - Tailwind CSS 4
-- NextAuth with GitHub OAuth
-- Prisma schema for Postgres
-- local file storage for MVP uploads
-- Python worker for queued job processing
+- optional NextAuth with GitHub OAuth for local admin sign-in
+- Prisma
+- PostgreSQL
+- local persistent storage for uploaded bundles under `var/uploads`
 
-## Key Routes
+## Main Routes
 
 - `/`
-- `/findings`
-- `/findings/[slug]`
-- `/leaderboards`
-- `/datasets`
-- `/models`
+- `/home`
+- `/skills`
+- `/skills/[skillId]`
+- `/skills/[skillId]/cases/[slug]`
 - `/submit`
 - `/reports`
-- `/reports/[id]`
+- `/findings` (compat redirect)
+- `/findings/[slug]` (compat redirect)
 - `/review`
 - `/review/[id]`
 
 ## API Surface
 
-- `POST /api/findings`
-- `POST /api/findings/:id/submit`
-- `POST /api/findings/:id/uploads`
-- `GET /api/review/findings`
-- `POST /api/review/findings/:id/status`
-- `POST /api/review/findings/:id/publish`
-- `POST /api/review/findings/:id/unpublish`
-- `GET /api/public/findings`
-- `GET /api/public/findings/:slug`
-- `GET /api/public/leaderboards`
-- `GET /api/public/datasets`
-- `GET /api/public/models`
+- `POST /api/uploads`
+- `GET /api/uploads/:id/preview`
+- `POST /api/uploads/:id/submit`
+- `GET /api/submissions/:id`
+- `GET /api/admin/reports`
+- `GET /api/admin/reports/:id`
+- `GET /api/admin/reports/:id/bundle`
+- `POST /api/admin/reports/:id/review`
+- `POST /api/admin/reports/:id/publish`
+- `POST /api/admin/reports/:id/unpublish`
+- `GET /api/public/cases`
+- `GET /api/public/cases/:slug`
 
-## Roles
+## Database Model
 
-- `reporter`
-  - create and edit drafts
-  - upload artifacts
-  - submit reports
-  - view their own report status
-- `reviewer`
-  - triage reports
-  - set duplicate and redaction states
-  - verify and publish
-- `admin`
-  - same as reviewer in this MVP
+The main production tables are:
+
+- `User`
+- `Submission`
+- `SubmissionFinding`
+- `SubmissionArtifact`
+- `ReviewRecord`
+- `PublicCase`
+
+See [prisma/schema.prisma](/root/SkillAttackCommunity/prisma/schema.prisma).
 
 ## Local Setup
 
@@ -115,126 +89,66 @@ That means:
 npm install
 ```
 
-2. Copy env template
+2. Create local env
 
 ```bash
 cp .env.example .env.local
 ```
 
-3. Optional: configure GitHub OAuth
+By default this gives you:
 
-- `GITHUB_ID`
-- `GITHUB_SECRET`
-- `NEXTAUTH_SECRET`
-- `ADMIN_GITHUB_LOGINS`
-- `REVIEWER_GITHUB_LOGINS`
+- guest browsing and submission for everyone
+- local-only admin access to `/review` and `/api/admin/*`
 
-If you skip that, the app uses demo auth by default.
-
-4. Start the web app
-
-```bash
-npm run dev
-```
-
-5. In another terminal, start the worker
-
-```bash
-npm run worker
-```
-
-6. Open `http://localhost:3000`
-
-## Environment Variables
-
-Core:
+If you also want GitHub identity on localhost, fill:
 
 - `NEXTAUTH_URL`
 - `NEXTAUTH_SECRET`
 - `GITHUB_ID`
 - `GITHUB_SECRET`
 - `ADMIN_GITHUB_LOGINS`
-- `REVIEWER_GITHUB_LOGINS`
 
-Storage:
+3. Start PostgreSQL
 
-- `LOCAL_STORAGE_ROOT`
-- `S3_ENDPOINT`
-- `S3_REGION`
-- `S3_BUCKET`
-- `S3_ACCESS_KEY_ID`
-- `S3_SECRET_ACCESS_KEY`
+Use any local Postgres instance and point `DATABASE_URL` at it.
 
-Worker:
-
-- `WORKER_POLL_SECONDS`
-- `WORKER_NAME`
-
-Demo:
-
-- `DEMO_AUTH`
-- `DEMO_ROLE`
-- `DEMO_NAME`
-- `DEMO_LOGIN`
-
-## Worker Behavior
-
-The worker reads queued jobs from `var/community-state.json`.
-
-Supported job types:
-
-- `parse_artifact_bundle`
-- `suggest_duplicates`
-- `build_public_case_payload`
-- `refresh_public_aggregates`
-
-Run once:
+4. Apply migrations
 
 ```bash
-python3 worker/main.py --once
+npx prisma migrate deploy
 ```
 
-## Artifact Conventions
-
-The upload parser understands these common SkillAtlas artifacts:
-
-- `analysis.json`
-- `attack.json`
-- `judge.json`
-- `judge_evidence.json`
-- `judge_path_delta.json`
-- `judge_decision_trace.json`
-- `stdout.txt`
-- `stderr.txt`
-- `file_changes.json`
-- `summary.md`
-- `summary.pdf`
-
-The worker and upload parser try to extract:
-
-- verdict
-- confidence
-- smoking gun
-- failure reason
-- skill id
-- run id
-- target objective
-
-## Commands
+5. Start the web app
 
 ```bash
 npm run dev
-npm run build
-npm run lint
-npm run typecheck
-npm run prisma:generate
-npm run db:push
-npm run worker
 ```
 
-## Notes
+6. Open `http://localhost:3000`
 
-- This MVP favors a working local product flow over full production infrastructure.
-- Public browsing is open, but submission requires authentication.
-- Reviewer verification is evidence-first. No mandatory in-platform rerun is required in v1.
-- Incentives, comments, payouts, and social feed mechanics are intentionally out of scope for this first cut.
+Admin review is intentionally local-only. Open `/review` from localhost, or use an SSH tunnel in production.
+
+## Production Deployment
+
+Use:
+
+- [docker-compose.yml](/root/SkillAttackCommunity/docker-compose.yml)
+- [Dockerfile](/root/SkillAttackCommunity/Dockerfile)
+- [DEPLOY.md](/root/SkillAttackCommunity/DEPLOY.md)
+- [.env.production.example](/root/SkillAttackCommunity/.env.production.example)
+
+The default production setup is:
+
+- one VM
+- one PostgreSQL container
+- one web container
+- one Caddy container
+- persistent volumes for Postgres and uploaded bundles
+
+## Security Notes
+
+- guest uploads are private by default
+- admin review routes are local-only by default
+- optional GitHub admin login is restricted by `ADMIN_GITHUB_LOGINS`
+- public pages render only sanitized structured data
+- local paths, runtime paths, file URIs, emails, IPs, and common secret patterns are redacted from preview data

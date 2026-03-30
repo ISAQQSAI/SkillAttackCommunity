@@ -8,163 +8,185 @@ datasource db {
 }
 
 enum UserRole {
-  reporter
-  reviewer
   admin
 }
 
-enum FindingStatus {
-  draft
+enum SubmissionStatus {
+  uploaded
+  parsing
+  preview_ready
+  parse_failed
   submitted
-  needs_info
-  triaged
-  duplicate
-  redaction_required
-  reviewer_verified
-  published
+  under_review
   rejected
+  approved
+  published
 }
 
-enum SnapshotScope {
-  home
-  leaderboard
-  dataset
-  model
+enum SubmissionSource {
+  web
+  api
 }
 
-enum JobType {
-  parse_artifact_bundle
-  suggest_duplicates
-  build_public_case_payload
-  refresh_public_aggregates
+enum ArtifactKind {
+  original_bundle
+  report_json
+  skill_archive
+  metadata
 }
 
-enum JobStatus {
-  queued
-  running
-  done
-  failed
+enum ArtifactVisibility {
+  admin_only
+  preview_only
+  public_case
+}
+
+enum ReviewAction {
+  submitted
+  under_review
+  rejected
+  approved
+  published
+  unpublished
+  note
 }
 
 model User {
-  id         String          @id @default(cuid())
-  githubId   String?         @unique
-  githubLogin String?        @unique
-  name       String
-  email      String?
-  image      String?
-  role       UserRole        @default(reporter)
-  visibility Json?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id            String         @id @default(cuid())
+  githubId      String?        @unique
+  githubLogin   String?        @unique
+  name          String
+  email         String?
+  image         String?
+  role          UserRole       @default(admin)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  findings   FindingReport[] @relation("ReporterFindings")
-  reviews    ReviewRecord[]  @relation("ReviewerRecords")
+  reviews       ReviewRecord[] @relation("ReviewerRecords")
+  publishedCases PublicCase[]  @relation("PublisherCases")
 }
 
-model FindingReport {
-  id                  String           @id @default(cuid())
-  status              FindingStatus    @default(draft)
-  reporterId          String
-  title               String
-  summary             String
-  skillName           String
-  skillUrl            String
-  vendor              String
-  skillVersion        String?
-  datasetTag          String
-  modelTags           Json
-  vulnType            String
-  severityClaim       String
-  attackPrompt        String
-  expectedRisk        String
-  reproSteps          String
-  observedResult      String
-  smokingGun          String
-  externalReferences  Json
-  publicSafe          Boolean          @default(false)
-  submittedAt         DateTime?
+model Submission {
+  id               String            @id @default(cuid())
+  publicId         String            @unique @default(cuid())
+  status           SubmissionStatus  @default(uploaded)
+  source           SubmissionSource  @default(web)
+  originalFilename String
+  contentType      String
+  sizeBytes        Int
+  storageKey       String
+  sha256           String
+  previewTokenHash String
+  trackingTokenHash String?
+  parserVersion    String            @default("skillattack-report-bundle-v1")
+  parseError       String?
+  bundleMeta       Json?
+  parsedIndex      Json?
+  previewPayload   Json?
+  summaryStats     Json?
+  redactionSummary Json?
+  submitterLabel   String?
+  contactEmail     String?
+  submissionNotes  String?
+  adminNotes       String?
   verificationSummary String?
-  duplicateOfId       String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  previewReadyAt   DateTime?
+  submittedAt      DateTime?
+  reviewedAt       DateTime?
+  publishedAt      DateTime?
 
-  reporter            User             @relation("ReporterFindings", fields: [reporterId], references: [id])
-  duplicateOf         FindingReport?   @relation("FindingDuplicates", fields: [duplicateOfId], references: [id])
-  duplicates          FindingReport[]  @relation("FindingDuplicates")
-  artifactBundle      ArtifactBundle?
-  reviewRecords       ReviewRecord[]
-  publishedFinding    PublishedFinding?
+  findings         SubmissionFinding[]
+  artifacts        SubmissionArtifact[]
+  reviews          ReviewRecord[]
+  publicCase       PublicCase?
+
+  @@index([status, updatedAt])
+  @@index([submittedAt])
 }
 
-model ArtifactBundle {
-  id               String        @id @default(cuid())
-  findingId        String        @unique
-  rawUploadLocation String
-  parsedManifest   Json
-  detectedFiles    Json
-  extractedMetadata Json
-  redactionFlags   Json
-  artifacts        Json
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+model SubmissionFinding {
+  id                   String      @id @default(cuid())
+  submissionId         String
+  sortOrder            Int
+  reportPath           String?
+  reportSkillId        String
+  sourceLink           String?
+  skillHash            String?
+  findingKey           String
+  harmType             String
+  vulnerabilitySurface String
+  provider             String?
+  model                String?
+  verdict              String?
+  reasonCode           String?
+  confidence           Float?
+  harmfulPromptPreview String
+  smokingGunPreview    String?
+  evidenceSummaryPreview String?
+  finalResponsePreview String?
+  redactionFlags       Json?
+  judgeSummary         Json?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 
-  finding          FindingReport @relation(fields: [findingId], references: [id])
+  submission           Submission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, sortOrder])
+  @@index([reportSkillId])
+}
+
+model SubmissionArtifact {
+  id            String             @id @default(cuid())
+  submissionId  String
+  kind          ArtifactKind
+  visibility    ArtifactVisibility @default(admin_only)
+  fileName      String
+  pathInBundle  String?
+  storageKey    String
+  contentType   String
+  sizeBytes     Int
+  sha256        String?
+  redactionFlags Json?
+  previewText   String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  submission    Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, kind])
 }
 
 model ReviewRecord {
-  id                 String         @id @default(cuid())
-  findingId          String
-  reviewerId         String
-  statusBefore       FindingStatus?
-  statusAfter        FindingStatus
-  reviewerNotes      String?
-  redactionNotes     String?
-  duplicateTargetId  String?
-  verificationSummary String?
-  createdAt          DateTime       @default(now())
+  id            String           @id @default(cuid())
+  submissionId  String
+  reviewerId    String
+  action        ReviewAction
+  statusBefore  SubmissionStatus?
+  statusAfter   SubmissionStatus
+  notes         String?
+  payload       Json?
+  createdAt     DateTime         @default(now())
 
-  finding            FindingReport  @relation(fields: [findingId], references: [id])
-  reviewer           User           @relation("ReviewerRecords", fields: [reviewerId], references: [id])
+  submission    Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  reviewer      User             @relation("ReviewerRecords", fields: [reviewerId], references: [id])
+
+  @@index([submissionId, createdAt])
 }
 
-model PublishedFinding {
-  id                 String         @id @default(cuid())
-  findingId          String         @unique
-  slug               String         @unique
-  publicTitle        String
-  publicSummary      String
-  publicEvidenceBlocks Json
-  publicArtifactLinks Json
-  verificationBadge  String
-  verdict            String?
-  publishedAt        DateTime       @default(now())
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+model PublicCase {
+  id            String      @id @default(cuid())
+  submissionId  String      @unique
+  slug          String      @unique
+  title         String
+  summary       String
+  payload       Json
+  publishedById String
+  publishedAt   DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  finding            FindingReport  @relation(fields: [findingId], references: [id])
-}
-
-model AggregateSnapshot {
-  id         String        @id @default(cuid())
-  scope      SnapshotScope
-  key        String
-  payload    Json
-  updatedAt  DateTime      @updatedAt
-
-  @@unique([scope, key])
-}
-
-model Job {
-  id         String      @id @default(cuid())
-  type       JobType
-  status     JobStatus   @default(queued)
-  payload    Json
-  attempts   Int         @default(0)
-  lastError  String?
-  runAfter   DateTime?
-  lockedAt   DateTime?
-  lockedBy   String?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  submission    Submission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  publishedBy   User        @relation("PublisherCases", fields: [publishedById], references: [id])
 }

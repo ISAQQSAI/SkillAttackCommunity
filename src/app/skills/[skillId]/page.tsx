@@ -1,9 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { RawReportModal } from "@/components/raw-report-modal";
+import {
+  actionButtonClass,
+  InsetCard,
+  PageHero,
+  SectionHeading,
+  SurfaceCard,
+} from "@/components/page-chrome";
 import { getLocale } from "@/lib/server/locale";
-import { getSkillVaultCopy, getSkillVaultRecord, getVerdictLabel } from "@/lib/skill-vault";
+import { getPublicSkillById } from "@/lib/server/public-skills";
 
 function formatNumber(locale: string, value: number, suffix?: string) {
   const formatted = new Intl.NumberFormat(locale === "zh" ? "zh-CN" : "en-US", {
@@ -11,6 +17,17 @@ function formatNumber(locale: string, value: number, suffix?: string) {
   }).format(value);
 
   return `${formatted}${suffix || ""}`;
+}
+
+function formatDate(locale: string, value?: string | Date | null) {
+  if (!value) {
+    return "-";
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function verdictBadgeClasses(verdict: string) {
@@ -32,9 +49,9 @@ export default async function SkillDetailPage({
   params: Promise<{ skillId: string }>;
 }) {
   const locale = await getLocale();
-  const copy = getSkillVaultCopy(locale);
-  const { skillId } = await params;
-  const record = await getSkillVaultRecord(skillId);
+  const { skillId: rawSkillId } = await params;
+  const skillId = decodeURIComponent(rawSkillId);
+  const record = await getPublicSkillById(skillId);
 
   if (!record) {
     notFound();
@@ -42,113 +59,116 @@ export default async function SkillDetailPage({
 
   return (
     <div className="grid gap-6">
-      <section className="rounded-[2rem] border border-black/10 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <div className="flex flex-wrap items-center gap-3">
-          <Link href="/skills" className="text-sm font-medium text-slate-600 underline-offset-4 hover:underline">
-            {copy.labels.backToVault}
-          </Link>
-          {record.ordinal ? (
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-600">
-              #{record.ordinal}
+      <PageHero
+        eyebrow={
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/skills" className="text-sm font-medium text-white/82 underline-offset-4 hover:underline">
+              {locale === "zh" ? "返回技能案例库" : "Back to public skills"}
+            </Link>
+            {record.ordinal ? (
+              <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/76">
+                #{record.ordinal}
+              </span>
+            ) : null}
+            <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/76">
+              {record.ownerLabel}
             </span>
-          ) : null}
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-600">
-            {record.ownerLabel}
-          </span>
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs uppercase tracking-[0.18em] text-emerald-800">
-            {record.primaryHarmType}
-          </span>
-        </div>
-
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight">{record.skillLabel}</h1>
-        <p className="mt-3 text-sm leading-7 text-slate-500">{record.skillId}</p>
-        <p className="mt-3 max-w-4xl text-sm leading-7 text-slate-600">
-          {record.representativeSummary || copy.labels.noRepresentative}
-        </p>
-
-        <div className="mt-6 flex flex-wrap gap-3">
-          {record.sourceLink ? (
-            <a
-              href={record.sourceLink}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm"
-            >
-              {copy.labels.openSource}
-            </a>
-          ) : null}
-          {record.skillArchiveUrl ? (
-            <a
-              href={record.skillArchiveUrl}
-              download
-              className="inline-flex items-center justify-center rounded-full bg-slate-950 px-4 py-2 text-sm font-medium !text-white no-underline visited:!text-white hover:bg-slate-800"
-              style={{ color: "#ffffff" }}
-            >
-              {copy.labels.downloadSkill}
-            </a>
-          ) : (
-            <span className="rounded-full border border-dashed border-black/15 px-4 py-2 text-sm text-slate-500">
-              {copy.labels.noArchive}
+            <span className="rounded-full bg-lime-300 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-950">
+              {record.primaryHarmType}
             </span>
-          )}
-        </div>
+          </div>
+        }
+        tone="dark"
+        title={record.skillLabel}
+        description={
+          <>
+            <span className="block text-white/56">{record.skillId}</span>
+            <span className="mt-3 block">{record.representativeSummary || "-"}</span>
+          </>
+        }
+        actions={
+          <>
+            {record.sourceLink ? (
+              <a
+                href={record.sourceLink}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-full border border-white/14 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5"
+              >
+                {locale === "zh" ? "打开来源链接" : "Open source link"}
+              </a>
+            ) : null}
+            {record.representativeCase ? (
+              <Link
+                href={`/skills/${encodeURIComponent(record.skillId)}/cases/${encodeURIComponent(record.representativeCase.slug)}`}
+                className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold !text-slate-950 transition hover:-translate-y-0.5"
+                style={{ color: "#0f172a" }}
+              >
+                {locale === "zh" ? "查看代表性案例" : "Open representative case"}
+              </Link>
+            ) : null}
+          </>
+        }
+        aside={
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+            <InsetCard tone="white">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{locale === "zh" ? "公开案例" : "Public cases"}</div>
+              <div className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-slate-950">{formatNumber(locale, record.caseCount)}</div>
+            </InsetCard>
+            <InsetCard tone="white">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{locale === "zh" ? "Findings" : "Findings"}</div>
+              <div className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-slate-950">{formatNumber(locale, record.findingCount)}</div>
+            </InsetCard>
+            <InsetCard tone="tint">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{locale === "zh" ? "模型数" : "Models"}</div>
+              <div className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-slate-950">{formatNumber(locale, record.modelCount)}</div>
+            </InsetCard>
+          </div>
+        }
+      />
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-3xl bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{copy.labels.skillId}</div>
+      <SurfaceCard className="grid gap-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <InsetCard>
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{locale === "zh" ? "Skill ID" : "Skill ID"}</div>
             <div className="mt-3 text-lg font-semibold">{record.skillId}</div>
-          </div>
-          <div className="rounded-3xl bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{copy.labels.reports}</div>
-            <div className="mt-3 text-lg font-semibold">{formatNumber(locale, record.reportCount)}</div>
-          </div>
-          <div className="rounded-3xl bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{copy.labels.models}</div>
-            <div className="mt-3 text-lg font-semibold">{formatNumber(locale, record.modelCount)}</div>
-          </div>
-          <div className="rounded-3xl bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{copy.labels.successCoverage}</div>
+          </InsetCard>
+          <InsetCard>
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{locale === "zh" ? "主要 surface" : "Primary surface"}</div>
+            <div className="mt-3 text-lg font-semibold">{record.primarySurfaceLabel}</div>
+          </InsetCard>
+          <InsetCard>
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{locale === "zh" ? "成功判定" : "Successful verdicts"}</div>
             <div className="mt-3 text-lg font-semibold">
-              {formatNumber(locale, record.successCount)}/{formatNumber(locale, record.reportCount)}
+              {formatNumber(locale, record.successCount)}/{formatNumber(locale, record.findingCount)}
             </div>
-          </div>
+          </InsetCard>
+          <InsetCard tone="tint">
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{locale === "zh" ? "最近更新" : "Last updated"}</div>
+            <div className="mt-3 text-lg font-semibold">{formatDate(locale, record.latestPublishedAt)}</div>
+          </InsetCard>
         </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[1.6rem] border border-black/8 bg-slate-50 p-5">
-            <h2 className="text-lg font-semibold">{copy.labels.representativeCase}</h2>
-            {record.representativeReport ? (
-              <div className="mt-4 grid gap-3 text-sm text-slate-700">
-                <div>
-                  {record.representativeReport.model}
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-                    <span className="rounded-full bg-white px-3 py-1">
-                      {copy.labels.lane} {record.representativeReport.lane || "-"}
-                    </span>
-                    <span className="rounded-full bg-white px-3 py-1">
-                      {copy.labels.round} {record.representativeReport.round || "-"}
-                    </span>
-                    {record.representativeReport.confidence !== null ? (
-                      <span className="rounded-full bg-white px-3 py-1">
-                        {copy.labels.confidence} {formatNumber(locale, record.representativeReport.confidence)}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                {record.representativeReport.evidenceSummary ? (
-                  <p className="leading-7 text-slate-600">{record.representativeReport.evidenceSummary}</p>
-                ) : null}
-                <p className="leading-7 text-slate-600">
-                  {record.representativeReport.smokingGunExcerpt || record.representativeReport.finalResponseExcerpt}
-                </p>
-              </div>
-            ) : (
-              <p className="mt-4 text-sm text-slate-500">{copy.labels.noRepresentative}</p>
-            )}
-          </div>
+        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <InsetCard className="p-5">
+            <h2 className="text-lg font-semibold">{locale === "zh" ? "技能概览" : "Skill overview"}</h2>
+            <p className="mt-4 text-sm leading-7 text-slate-700">
+              {record.representativeSummary || "-"}
+            </p>
+            {record.sourceLink ? (
+              <a
+                href={record.sourceLink}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+              >
+                {record.sourceLink}
+              </a>
+            ) : null}
+          </InsetCard>
 
-          <div className="rounded-[1.6rem] border border-black/8 bg-slate-50 p-5">
-            <h2 className="text-lg font-semibold">{copy.labels.primaryRisk}</h2>
+          <InsetCard className="p-5">
+            <h2 className="text-lg font-semibold">{locale === "zh" ? "风险与模型" : "Risk and model coverage"}</h2>
             <div className="mt-4 flex flex-wrap gap-2">
               {record.harmTypes.map((label) => (
                 <span key={label} className="rounded-full bg-white px-3 py-2 text-sm text-slate-700">
@@ -157,16 +177,7 @@ export default async function SkillDetailPage({
               ))}
             </div>
 
-            <h2 className="mt-6 text-lg font-semibold">{copy.labels.primarySurface}</h2>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {record.surfaceLabels.map((label) => (
-                <span key={label} className="rounded-full bg-white px-3 py-2 text-sm text-slate-700">
-                  {label}
-                </span>
-              ))}
-            </div>
-
-            <h2 className="mt-6 text-lg font-semibold">{copy.labels.models}</h2>
+            <h3 className="mt-6 text-lg font-semibold">{locale === "zh" ? "Models" : "Models"}</h3>
             <div className="mt-4 flex flex-wrap gap-2">
               {record.models.map((model) => (
                 <span key={model} className="rounded-full bg-white px-3 py-2 text-sm text-slate-700">
@@ -174,132 +185,91 @@ export default async function SkillDetailPage({
                 </span>
               ))}
             </div>
-          </div>
+          </InsetCard>
         </div>
-      </section>
+      </SurfaceCard>
 
-      <section className="grid gap-4 rounded-[2rem] border border-black/10 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold">{copy.labels.reportTrail}</h2>
-            <p className="text-sm leading-7 text-slate-600">{copy.labels.reportTrailBody}</p>
-          </div>
-        </div>
+      <SurfaceCard className="grid gap-4">
+        <SectionHeading
+          title={locale === "zh" ? "该技能下的公开案例" : "Published cases under this skill"}
+          description={
+            locale === "zh"
+              ? "每条公开案例都只保留脱敏后的结构化 finding 和管理员审核结论。"
+              : "Each public case keeps only the sanitized structured findings and admin verification summary."
+          }
+          action={
+            <Link href="/skills" className={actionButtonClass("secondary")}>
+              {locale === "zh" ? "返回技能案例库" : "Back to public skills"}
+            </Link>
+          }
+        />
 
         <div className="grid gap-4">
-          {record.reports.map((report) => (
-            <article key={report.id} className="grid gap-4 rounded-[1.6rem] border border-black/8 bg-slate-50 p-5">
+          {record.cases.map((item) => (
+            <InsetCard key={`${record.skillId}-${item.slug}`} className="grid gap-4 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-                  <span className="rounded-full bg-white px-3 py-1">{report.model}</span>
-                  <span className="rounded-full bg-white px-3 py-1">
-                    {copy.labels.lane} {report.lane || "-"}
-                  </span>
-                  <span className="rounded-full bg-white px-3 py-1">
-                    {copy.labels.round} {report.round || "-"}
-                  </span>
-                  {report.provider ? <span className="rounded-full bg-white px-3 py-1">{report.provider}</span> : null}
+                <div className="grid gap-2">
+                  <h3 className="text-xl font-semibold tracking-[-0.04em] text-slate-950">{item.title}</h3>
+                  <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
+                    <span className="rounded-full bg-white px-3 py-1">{formatDate(locale, item.publishedAt)}</span>
+                    <span className="rounded-full bg-white px-3 py-1">
+                      {item.findingCount} {locale === "zh" ? "findings" : "findings"}
+                    </span>
+                    {item.models.map((model) => (
+                      <span key={model} className="rounded-full bg-white px-3 py-1">{model}</span>
+                    ))}
+                  </div>
                 </div>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${verdictBadgeClasses(report.verdict)}`}
+                <Link
+                  href={`/skills/${encodeURIComponent(record.skillId)}/cases/${encodeURIComponent(item.slug)}`}
+                  className={actionButtonClass("primary")}
                 >
-                  {getVerdictLabel(report.verdict, locale)}
-                </span>
+                  {locale === "zh" ? "查看案例详情" : "Open case detail"}
+                </Link>
               </div>
 
-              <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-                <span className="rounded-full bg-white px-3 py-1">{report.harmType}</span>
-                {report.vulnerabilitySurface ? (
-                  <span className="rounded-full bg-white px-3 py-1">{report.vulnerabilitySurface}</span>
-                ) : null}
-                {report.confidence !== null ? (
-                  <span className="rounded-full bg-white px-3 py-1">
-                    {copy.labels.confidence} {formatNumber(locale, report.confidence)}
-                  </span>
-                ) : null}
-              </div>
+              <p className="text-sm leading-7 text-slate-600">{item.summary}</p>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl bg-white p-4 text-sm">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.labels.evidenceSummary}</div>
-                  <div className="mt-2 text-slate-700">{report.evidenceSummary || "-"}</div>
-                </div>
-                <div className="rounded-2xl bg-white p-4 text-sm">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.labels.generatedAt}</div>
-                  <div className="mt-2 text-slate-700">{report.generatedAt || "-"}</div>
-                </div>
-                <div className="rounded-2xl bg-white p-4 text-sm">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.labels.observedPaths}</div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {report.observedPaths.length ? (
-                      report.observedPaths.map((item) => (
-                        <span key={item} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
-                          {item}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-slate-500">-</span>
-                    )}
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-white p-4 text-sm">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.labels.predictedTools}</div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {report.predictedTools.length ? (
-                      report.predictedTools.map((item) => (
-                        <span key={item} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
-                          {item}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-slate-500">-</span>
-                    )}
-                  </div>
-                </div>
-              </div>
+              {item.verificationSummary ? (
+                <InsetCard tone="white" className="text-sm">
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{locale === "zh" ? "审核结论" : "Verification summary"}</div>
+                  <p className="mt-2 whitespace-pre-wrap leading-7 text-slate-700">{item.verificationSummary}</p>
+                </InsetCard>
+              ) : null}
 
-              <div className="grid gap-3 lg:grid-cols-3">
-                <div className="rounded-2xl bg-white p-4 text-sm">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.labels.harmfulPrompt}</div>
-                  <p className="mt-2 leading-7 text-slate-700">{report.harmfulPromptExcerpt || "-"}</p>
-                </div>
-                <div className="rounded-2xl bg-white p-4 text-sm">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.labels.smokingGun}</div>
-                  {report.smokingGun.length ? (
-                    <div className="mt-2 grid gap-2">
-                      {report.smokingGun.map((item) => (
-                        <p key={item} className="leading-7 text-slate-700">
-                          {item}
-                        </p>
-                      ))}
+              <div className="grid gap-3 lg:grid-cols-2">
+                {item.findings.map((finding) => (
+                  <InsetCard key={finding.findingKey} tone="white" className="grid gap-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
+                        {finding.model ? <span className="rounded-full bg-slate-100 px-3 py-1">{finding.model}</span> : null}
+                        {finding.provider ? <span className="rounded-full bg-slate-100 px-3 py-1">{finding.provider}</span> : null}
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${verdictBadgeClasses(finding.verdict)}`}>
+                        {finding.verdict}
+                      </span>
                     </div>
-                  ) : (
-                    <p className="mt-2 leading-7 text-slate-500">-</p>
-                  )}
-                </div>
-                <div className="rounded-2xl bg-white p-4 text-sm">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.labels.finalResponse}</div>
-                  <p className="mt-2 leading-7 text-slate-700">{report.finalResponseExcerpt || "-"}</p>
-                </div>
+                    <div>
+                      <div className="text-base font-semibold text-slate-900">{finding.harmType}</div>
+                      <div className="mt-1 text-slate-500">{finding.vulnerabilitySurface || "-"}</div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{locale === "zh" ? "置信度" : "Confidence"}</div>
+                        <div className="mt-2 text-slate-700">{finding.confidence ?? "-"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{locale === "zh" ? "证据摘要" : "Evidence summary"}</div>
+                        <div className="mt-2 text-slate-700">{finding.evidenceSummaryPreview || "-"}</div>
+                      </div>
+                    </div>
+                  </InsetCard>
+                ))}
               </div>
-
-              <div className="flex flex-wrap gap-3 text-sm font-medium text-slate-700">
-                <RawReportModal
-                  triggerLabel={copy.labels.viewRawReport}
-                  panelLabel={copy.labels.rawReportPanel}
-                  closeLabel={copy.labels.closePanel}
-                  loadingLabel={copy.labels.rawJsonLoading}
-                  errorLabel={copy.labels.rawJsonError}
-                  openInNewTabLabel={copy.labels.openInNewTab}
-                  title={`${report.model} · ${copy.labels.rawReport}`}
-                  subtitle={report.fileName}
-                  reportUrl={report.reportUrl}
-                />
-              </div>
-            </article>
+            </InsetCard>
           ))}
         </div>
-      </section>
+      </SurfaceCard>
     </div>
   );
 }

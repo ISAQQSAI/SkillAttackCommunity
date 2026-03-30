@@ -231,12 +231,14 @@ function buildReportUrl(skillId: string, fileName: string) {
 }
 
 function stripReport(entry: InternalSkillVaultReportEntry): SkillVaultReportEntry {
-  const { reportPath: _reportPath, ...publicEntry } = entry;
+  const { reportPath, ...publicEntry } = entry;
+  void reportPath;
   return publicEntry;
 }
 
 function stripRecord(record: InternalSkillVaultRecord): SkillVaultRecord {
-  const { skillArchivePath: _skillArchivePath, representativeReport, reports, ...rest } = record;
+  const { skillArchivePath, representativeReport, reports, ...rest } = record;
+  void skillArchivePath;
   return {
     ...rest,
     representativeReport: representativeReport ? stripReport(representativeReport) : null,
@@ -406,12 +408,15 @@ async function loadSkillRecord(skillId: string): Promise<InternalSkillVaultRecor
 
 const loadSkillVaultData = cache(async () => {
   const manifest = await readManifest();
+  const dataRootExists = await fileExists(DATA_ROOT);
   const listedSkills = manifest.kept_skills?.length
     ? manifest.kept_skills
-    : (await fs.readdir(DATA_ROOT, { withFileTypes: true }))
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name)
-        .sort((left, right) => left.localeCompare(right));
+    : dataRootExists
+      ? (await fs.readdir(DATA_ROOT, { withFileTypes: true }))
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => entry.name)
+          .sort((left, right) => left.localeCompare(right))
+      : [];
 
   const records = (
     await Promise.all(listedSkills.map((skillId) => loadSkillRecord(skillId)))

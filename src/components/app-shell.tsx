@@ -3,23 +3,22 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signIn, signOut } from "next-auth/react";
+import { signOut } from "next-auth/react";
 
 import type { Viewer } from "@/lib/community";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { actionButtonClass } from "@/components/page-chrome";
 import { getDictionary, translateRole, type Locale } from "@/lib/i18n";
 import { skillAttackLinks } from "@/lib/skillattack-links";
 
 interface AppShellProps {
   children: React.ReactNode;
   viewer: Viewer | null;
-  backendMode: string;
-  githubEnabled: boolean;
   locale: Locale;
   brand: string;
 }
 
-export function AppShell({ children, viewer, backendMode, githubEnabled, locale, brand }: AppShellProps) {
+export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
   const dict = getDictionary(locale);
   const pathname = usePathname();
   const isLandingPage = pathname === "/";
@@ -27,7 +26,7 @@ export function AppShell({ children, viewer, backendMode, githubEnabled, locale,
     { href: "/home", label: dict.shell.nav.home },
     { href: "/skills", label: dict.shell.nav.skills },
     { href: "/submit", label: dict.shell.nav.submit },
-    ...(viewer ? [{ href: "/reports", label: dict.shell.nav.reports }] : []),
+    { href: "/reports", label: locale === "zh" ? "查询提交" : "Track submission" },
     ...(viewer && viewer.role === "admin"
       ? [{ href: "/review", label: dict.shell.nav.review }]
       : []),
@@ -50,36 +49,47 @@ export function AppShell({ children, viewer, backendMode, githubEnabled, locale,
     },
   ];
 
+  function isActive(href: string) {
+    if (href === "/skills" && (pathname === "/findings" || pathname.startsWith("/findings/"))) {
+      return true;
+    }
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(255,108,71,0.15),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(0,143,126,0.16),_transparent_24%),linear-gradient(180deg,_#fbf7f1,_#f0e8da)] text-slate-900">
+    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(255,108,71,0.16),_transparent_24%),radial-gradient(circle_at_82%_14%,_rgba(0,143,126,0.12),_transparent_18%),radial-gradient(circle_at_bottom_left,_rgba(255,220,160,0.28),_transparent_24%),linear-gradient(180deg,_#f7f1e6,_#efe6d7_48%,_#f7f2ea)] text-slate-900">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.018)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.018)_1px,transparent_1px)] bg-[size:26px_26px] opacity-55" />
+      <div className="pointer-events-none absolute -left-24 top-24 h-72 w-72 rounded-full bg-amber-200/35 blur-3xl" />
+      <div className="pointer-events-none absolute -right-28 top-48 h-80 w-80 rounded-full bg-emerald-200/25 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-white/30 blur-3xl" />
       {isLandingPage ? null : (
-        <header className="border-b border-black/8 bg-white/80 backdrop-blur">
-          <div className="mx-auto grid w-full max-w-7xl gap-3 px-6 py-2.5 lg:grid-cols-[minmax(0,1.35fr)_max-content] lg:items-center">
-            <div className="grid grid-cols-[auto_1fr] items-center gap-2.5">
+        <header className="sticky top-0 z-40 border-b border-black/6 bg-[rgba(247,241,230,0.74)] backdrop-blur-xl">
+          <div className="mx-auto grid w-full max-w-7xl gap-3 px-5 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_max-content] lg:items-center lg:py-5">
+            <div className="grid grid-cols-[auto_1fr] items-center gap-4">
               <Link href="/home" className="text-slate-950">
                 <Image
-                  src="/skillattack-logo.png?v=20260329"
+                  src="/skillattack-logo-1.png"
                   alt="SkillAtlas logo"
                   width={112}
                   height={112}
                   unoptimized
-                  className="h-16 w-16 rounded-[1.2rem] border border-black/10 bg-white p-1.5 object-contain shadow-[0_10px_30px_rgba(15,23,42,0.08)] sm:h-[4.5rem] sm:w-[4.5rem]"
+                  className="h-20 w-20 rounded-[1.6rem] border border-black/8 bg-white/95 p-1.5 object-contain shadow-[0_14px_36px_rgba(15,23,42,0.1)] sm:h-24 sm:w-24"
                 />
               </Link>
               <div className="flex min-w-0 flex-col gap-1">
                 <Link href="/home" className="text-slate-950">
-                  <span className="text-[1.65rem] font-semibold tracking-tight lg:text-[2.05rem]">
+                  <span className="text-[2.1rem] font-semibold tracking-[-0.06em] lg:text-[2.9rem]">
                     {brand}
                   </span>
                 </Link>
-                <p className="max-w-4xl text-[13px] leading-[1.15rem] text-slate-600">
+                <p className="max-w-5xl text-[15px] leading-6 text-slate-600 lg:text-[16px]">
                   {dict.shell.tagline}
                 </p>
               </div>
             </div>
-            <div className="flex flex-col gap-2.5 lg:items-end">
+            <div className="flex flex-col gap-3 lg:items-end">
               <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 rounded-full border border-black/8 bg-white/75 px-2 py-2 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
                   {externalLinks.map((item) => (
                     <a
                       key={item.href}
@@ -88,7 +98,7 @@ export function AppShell({ children, viewer, backendMode, githubEnabled, locale,
                       rel="noreferrer"
                       aria-label={item.label}
                       title={item.label}
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white text-slate-700 transition hover:-translate-y-0.5"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-black/8 bg-white text-slate-700 transition hover:-translate-y-0.5 hover:text-slate-950"
                     >
                       {item.icon}
                     </a>
@@ -97,42 +107,38 @@ export function AppShell({ children, viewer, backendMode, githubEnabled, locale,
                 <LanguageSwitcher locale={locale} />
                 {viewer ? (
                   <>
-                    <div className="rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-sm">
+                    <div className="rounded-full border border-black/8 bg-white/80 px-3.5 py-1.5 text-sm shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
                       {viewer.name} · {translateRole(viewer.role, locale)}
+                      {viewer.isLocal ? ` · ${locale === "zh" ? "仅本地" : "local only"}` : ""}
                       {viewer.isDemo ? ` · ${dict.shell.demoMode}` : ""}
                     </div>
-                    {viewer.isDemo ? null : (
+                    {viewer.isDemo || viewer.isLocal ? null : (
                       <button
                         type="button"
                         onClick={() => signOut()}
-                        className="rounded-full bg-slate-950 px-3.5 py-1.5 text-sm font-medium text-white transition hover:-translate-y-0.5"
+                        className={actionButtonClass("primary")}
                       >
                         {dict.shell.signOut}
                       </button>
                     )}
                   </>
-                ) : githubEnabled ? (
-                  <button
-                    type="button"
-                    onClick={() => signIn("github")}
-                    className="rounded-full bg-slate-950 px-3.5 py-1.5 text-sm font-medium text-white transition hover:-translate-y-0.5"
-                  >
-                    {dict.shell.signIn}
-                  </button>
-                ) : (
-                  <div className="rounded-full border border-dashed border-black/20 px-3.5 py-1.5 text-sm text-slate-600">
-                    {dict.shell.authHint}
-                  </div>
-                )}
+                ) : null}
               </div>
-              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <div className="flex flex-wrap items-center gap-2 rounded-[1.4rem] border border-black/8 bg-white/72 p-2 shadow-[0_18px_40px_rgba(15,23,42,0.05)] lg:justify-end">
                 {nav.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-[14px] transition hover:-translate-y-0.5"
+                    className={`rounded-full px-3.5 py-2 text-[14px] font-medium transition ${
+                      isActive(item.href)
+                        ? "bg-slate-950 text-white !text-white shadow-[0_12px_30px_rgba(15,23,42,0.16)] hover:!text-white visited:!text-white"
+                        : "border border-transparent bg-white/78 text-slate-700 hover:-translate-y-0.5 hover:bg-white"
+                    }`}
+                    style={isActive(item.href) ? { color: "#ffffff" } : undefined}
                   >
-                    {item.label}
+                    <span style={isActive(item.href) ? { color: "#ffffff" } : undefined}>
+                      {item.label}
+                    </span>
                   </Link>
                 ))}
               </div>
@@ -140,7 +146,7 @@ export function AppShell({ children, viewer, backendMode, githubEnabled, locale,
           </div>
         </header>
       )}
-      <main className={`mx-auto flex w-full max-w-7xl flex-1 flex-col ${isLandingPage ? "px-0 py-0" : "px-6 py-8"}`}>
+      <main className={`relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col ${isLandingPage ? "px-0 py-0" : "px-5 py-8 sm:px-6 lg:py-10"}`}>
         {children}
       </main>
     </div>

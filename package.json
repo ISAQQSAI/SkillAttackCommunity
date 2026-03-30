@@ -14,7 +14,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^7.5.0",
+    "@prisma/client": "5.10.0",
     "adm-zip": "^0.5.16",
     "next": "16.2.1",
     "next-auth": "^4.24.13",
@@ -30,7 +30,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
-    "prisma": "^7.5.0",
+    "prisma": "5.10.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

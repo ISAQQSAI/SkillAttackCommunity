@@ -68,7 +68,7 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
             <div className="grid grid-cols-[auto_1fr] items-center gap-4">
               <Link href="/home" className="text-slate-950">
                 <Image
-                  src="/skillattack-logo-1.png"
+                  src="/skillatlas-logo-5-2-6.svg"
                   alt="SkillAtlas logo"
                   width={112}
                   height={112}

@@ -19,6 +19,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "SkillAtlas",
   description: "ATLAS — Attack Trace Library for Agent Skills.",
+  icons: {
+    icon: "/skillatlas-logo-5-2-6.svg",
+    shortcut: "/skillatlas-logo-5-2-6.svg",
+    apple: "/skillatlas-logo-5-2-6.svg",
+  },
 };
 
 export default async function RootLayout({

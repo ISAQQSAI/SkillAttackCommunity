@@ -37,12 +37,36 @@ export default async function SkillDetailPage({
     (locale === "zh"
       ? "未在解压后的 SKILL.md 中找到 description。"
       : "No description was found in the extracted SKILL.md.");
+  const copy =
+    locale === "zh"
+      ? {
+          badge: "Skill 详情",
+          overview: "Skill 概览",
+          owner: "归属方",
+          skillId: "Skill ID",
+          description: "SKILL.md 描述",
+          coverage: "覆盖情况",
+          riskTypes: "风险类型",
+          surfaceLevels: "轨迹等级",
+          agentModels: "Agent 模型",
+        }
+      : {
+          badge: "Skill detail",
+          overview: "Skill overview",
+          owner: "Owner",
+          skillId: "Skill ID",
+          description: "SKILL.md description",
+          coverage: "Coverage",
+          riskTypes: "Risk types",
+          surfaceLevels: "Trace levels",
+          agentModels: "Agent models",
+        };
 
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap gap-3">
         <Link href="/vulnerabilities" className={actionButtonClass("secondary")}>
-          {locale === "zh" ? "返回攻击面列表" : "Back to surfaces"}
+          {locale === "zh" ? "返回轨迹列表" : "Back to traces"}
         </Link>
         <Link href="/home" className={actionButtonClass("ghost")}>
           {locale === "zh" ? "返回首页" : "Back to home"}
@@ -53,7 +77,7 @@ export default async function SkillDetailPage({
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_minmax(0,0.52fr)_minmax(0,0.52fr)_minmax(0,0.52fr)] xl:items-stretch">
           <div className="grid content-center gap-4 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-6 py-6 sm:px-8">
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-              {locale === "zh" ? "Skill Detail" : "Skill detail"}
+              {copy.badge}
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
               {record.ordinal ? (
@@ -108,7 +132,7 @@ export default async function SkillDetailPage({
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
         <SurfaceCard className="grid gap-4">
           <SectionHeading
-            title={locale === "zh" ? "Skill Overview" : "Skill overview"}
+            title={copy.overview}
             description={
               locale === "zh"
                 ? "这里展示 skill 的基础标识信息，以及解压后 SKILL.md 里的 description。"
@@ -119,13 +143,13 @@ export default async function SkillDetailPage({
             <div className="grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-2">
               <div className="grid gap-1 bg-white px-4 py-3">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {locale === "zh" ? "Owner" : "Owner"}
+                  {copy.owner}
                 </div>
                 <div className="text-sm font-medium text-slate-900">{record.ownerLabel}</div>
               </div>
               <div className="grid gap-1 bg-white px-4 py-3">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {locale === "zh" ? "Skill ID" : "Skill ID"}
+                  {copy.skillId}
                 </div>
                 <div className="break-all text-sm font-medium text-slate-900">{record.skillId}</div>
               </div>
@@ -133,7 +157,7 @@ export default async function SkillDetailPage({
 
             <div className="border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-5 py-5">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                {locale === "zh" ? "SKILL.md Description" : "SKILL.md description"}
+                {copy.description}
               </div>
               <div className="mt-3 text-sm leading-7 text-slate-700">
                 {skillDescriptionText}
@@ -144,7 +168,7 @@ export default async function SkillDetailPage({
 
         <SurfaceCard className="grid gap-5">
           <SectionHeading
-            title={locale === "zh" ? "Coverage" : "Coverage"}
+            title={copy.coverage}
             description={
               locale === "zh"
                 ? "按当前公开轨迹汇总该 skill 涉及的风险类型、等级和 agent models。"
@@ -155,7 +179,7 @@ export default async function SkillDetailPage({
           <div className="grid gap-4">
             <div className="grid gap-2 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                {locale === "zh" ? "Risk Types" : "Risk types"}
+                {copy.riskTypes}
               </div>
               <div className="flex flex-wrap gap-2">
                 {record.riskTypes.map((label) => (
@@ -168,7 +192,7 @@ export default async function SkillDetailPage({
 
             <div className="grid gap-2 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                {locale === "zh" ? "Surface Levels" : "Surface levels"}
+                {copy.surfaceLevels}
               </div>
               <div className="flex flex-wrap gap-2">
                 {record.surfaceLevels.map((level) => (
@@ -181,7 +205,7 @@ export default async function SkillDetailPage({
 
             <div className="grid gap-2 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                {locale === "zh" ? "Agent Models" : "Agent models"}
+                {copy.agentModels}
               </div>
               <div className="flex flex-wrap gap-2">
                 {record.agentModels.map((model) => (
@@ -197,7 +221,7 @@ export default async function SkillDetailPage({
 
       <SurfaceCard className="grid gap-4">
         <SectionHeading
-          title={locale === "zh" ? "该 skill 下的 surface" : "Surfaces under this skill"}
+          title={locale === "zh" ? "该 skill 下的轨迹" : "Traces under this skill"}
           description={
             locale === "zh"
               ? "每个 surface 都直接来自当前公开数据集，并沿用首页与攻击面列表页的同一套卡片结构。"
@@ -205,7 +229,7 @@ export default async function SkillDetailPage({
           }
           action={
             <Link href="/vulnerabilities" className={actionButtonClass("secondary")}>
-              {locale === "zh" ? "返回攻击面总览" : "Back to surfaces"}
+              {locale === "zh" ? "返回轨迹总览" : "Back to traces"}
             </Link>
           }
         />

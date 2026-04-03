@@ -12,14 +12,9 @@ enum UserRole {
 }
 
 enum SubmissionStatus {
-  uploaded
-  parsing
-  preview_ready
-  parse_failed
   submitted
   under_review
   rejected
-  approved
   published
 }
 
@@ -37,7 +32,6 @@ enum ArtifactKind {
 
 enum ArtifactVisibility {
   admin_only
-  preview_only
   public_case
 }
 
@@ -45,9 +39,7 @@ enum ReviewAction {
   submitted
   under_review
   rejected
-  approved
   published
-  unpublished
   note
 }
 
@@ -69,22 +61,12 @@ model User {
 model Submission {
   id               String            @id @default(cuid())
   publicId         String            @unique @default(cuid())
-  status           SubmissionStatus  @default(uploaded)
+  status           SubmissionStatus  @default(submitted)
   source           SubmissionSource  @default(web)
+  parsedBundleId   String
   originalFilename String
   contentType      String
   sizeBytes        Int
-  storageKey       String
-  sha256           String
-  previewTokenHash String
-  trackingTokenHash String?
-  parserVersion    String            @default("skillattack-report-bundle-v1")
-  parseError       String?
-  bundleMeta       Json?
-  parsedIndex      Json?
-  previewPayload   Json?
-  summaryStats     Json?
-  redactionSummary Json?
   submitterLabel   String?
   contactEmail     String?
   submissionNotes  String?
@@ -92,23 +74,43 @@ model Submission {
   verificationSummary String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
-  previewReadyAt   DateTime?
   submittedAt      DateTime?
   reviewedAt       DateTime?
   publishedAt      DateTime?
 
-  findings         SubmissionFinding[]
-  artifacts        SubmissionArtifact[]
+  parsedBundle     ParsedBundle      @relation(fields: [parsedBundleId], references: [id], onDelete: Restrict)
   reviews          ReviewRecord[]
   publicCase       PublicCase?
 
   @@index([status, updatedAt])
   @@index([submittedAt])
+  @@index([parsedBundleId])
 }
 
-model SubmissionFinding {
+model ParsedBundle {
+  id               String               @id @default(cuid())
+  sha256           String
+  parserVersion    String               @default("skillatlas-submission-v2")
+  storageKey       String
+  parseError       String?
+  bundleMeta       Json?
+  parsedIndex      Json?
+  displayPayload   Json?
+  summaryStats     Json?
+  redactionSummary Json?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  submissions      Submission[]
+  findings         ParsedBundleFinding[]
+  artifacts        ParsedBundleArtifact[]
+
+  @@unique([sha256, parserVersion])
+}
+
+model ParsedBundleFinding {
   id                   String      @id @default(cuid())
-  submissionId         String
+  parsedBundleId       String
   sortOrder            Int
   reportPath           String?
   reportSkillId        String
@@ -131,15 +133,15 @@ model SubmissionFinding {
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
-  submission           Submission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  parsedBundle         ParsedBundle  @relation(fields: [parsedBundleId], references: [id], onDelete: Cascade)
 
-  @@index([submissionId, sortOrder])
+  @@index([parsedBundleId, sortOrder])
   @@index([reportSkillId])
 }
 
-model SubmissionArtifact {
+model ParsedBundleArtifact {
   id            String             @id @default(cuid())
-  submissionId  String
+  parsedBundleId String
   kind          ArtifactKind
   visibility    ArtifactVisibility @default(admin_only)
   fileName      String
@@ -153,9 +155,9 @@ model SubmissionArtifact {
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
-  submission    Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  parsedBundle  ParsedBundle       @relation(fields: [parsedBundleId], references: [id], onDelete: Cascade)
 
-  @@index([submissionId, kind])
+  @@index([parsedBundleId, kind])
 }
 
 model ReviewRecord {

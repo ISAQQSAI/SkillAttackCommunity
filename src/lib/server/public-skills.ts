@@ -3,8 +3,10 @@ import { cache } from "react";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { readJsonList, readJsonRecord } from "@/lib/public-case-routing";
 import { matchPublicRiskCategory } from "@/lib/public-risk-categories";
 import { parseSkillPresentation } from "@/lib/public-presentation";
+import { listPublicCases } from "@/lib/server/report-submissions";
 
 const PUBLIC_DATASET_DIR = path.join(process.cwd(), "multi_model_test");
 
@@ -14,6 +16,19 @@ function normalizeText(value: unknown) {
 
 function compactText(value: unknown) {
   return normalizeText(value).replace(/\s+/g, " ").trim();
+}
+
+function readModelName(value: unknown) {
+  if (typeof value === "string") {
+    return compactText(value);
+  }
+
+  const record = readObject(value);
+  return (
+    compactText(record.model) ||
+    compactText(record.primary) ||
+    compactText(record.name)
+  );
 }
 
 function readObject(value: unknown) {
@@ -148,6 +163,38 @@ function extractModelNames(roundRecord: Record<string, unknown>) {
   }
 
   return uniqueSorted(models);
+}
+
+function extractConfiguredStageModels(
+  modelConfig: Record<string, unknown>,
+  fallbackModel?: string
+) {
+  const normalizedFallback = compactText(fallbackModel);
+  const attackModel = readModelName(readObject(modelConfig.attacker));
+  const simulationModel = readModelName(readObject(modelConfig.simulator));
+  const judgeModel = readModelName(readObject(modelConfig.judge));
+  const feedbackModel = readModelName(readObject(modelConfig.feedback));
+
+  return {
+    attackModel: attackModel || normalizedFallback || undefined,
+    simulationModel: simulationModel || normalizedFallback || undefined,
+    judgeModel: judgeModel || normalizedFallback || undefined,
+    suggestionModel:
+      feedbackModel || judgeModel || normalizedFallback || undefined,
+  };
+}
+
+function extractStepModel(
+  step: Record<string, unknown>,
+  fallbackModel?: string
+) {
+  const metadata = readObject(step.metadata);
+  return (
+    readModelName(step.model) ||
+    readModelName(metadata.model) ||
+    compactText(fallbackModel) ||
+    undefined
+  );
 }
 
 function createSurfaceSlug(skillId: string, surfaceId: string, sourceScope?: string | null) {
@@ -328,6 +375,7 @@ export interface PublicSimulationStep {
   content: string;
   isError: boolean;
   timestamp: Date | null;
+  model?: string;
 }
 
 export interface PublicSurfaceRound {
@@ -343,6 +391,10 @@ export interface PublicSurfaceRound {
   surfaceTitle: string;
   surfaceLevel: string;
   actionableSuggestion: string;
+  attackModel?: string;
+  simulationModel?: string;
+  judgeModel?: string;
+  suggestionModel?: string;
   simulationSteps: PublicSimulationStep[];
   updatedAt: Date | null;
 }
@@ -434,13 +486,18 @@ const loadPublicSurfaceLibrary = cache(async () => {
     const presentation = parseSkillPresentation(skillId);
     const sourceScope = skillEntry.sourceScope;
     let agentModel = "";
+    let modelConfig: Record<string, unknown> = {};
 
     try {
-      const modelConfig = readObject(await readJsonFile(path.join(skillPath, "model.json")));
-      agentModel = normalizeText(readObject(modelConfig.simulator).model) || normalizeText(sourceScope);
+      modelConfig = readObject(await readJsonFile(path.join(skillPath, "model.json")));
+      agentModel =
+        readModelName(readObject(modelConfig.simulator)) || normalizeText(sourceScope);
     } catch {
       agentModel = normalizeText(sourceScope);
+      modelConfig = {};
     }
+
+    const stageModels = extractConfiguredStageModels(modelConfig, agentModel);
 
     let globalReport: Record<string, unknown> = {};
     try {
@@ -503,6 +560,7 @@ const loadPublicSurfaceLibrary = cache(async () => {
             content,
             isError: Boolean(step.is_error),
             timestamp: timestamp ? new Date(timestamp) : null,
+            model: extractStepModel(step, stageModels.simulationModel),
           };
         });
 
@@ -523,6 +581,10 @@ const loadPublicSurfaceLibrary = cache(async () => {
           surfaceTitle: normalizeText(metadata.surface_title),
           surfaceLevel: normalizeText(metadata.surface_level),
           actionableSuggestion: normalizeText(judge.actionable_suggestion),
+          attackModel: stageModels.attackModel,
+          simulationModel: stageModels.simulationModel,
+          judgeModel: stageModels.judgeModel,
+          suggestionModel: stageModels.suggestionModel,
           simulationSteps,
           updatedAt: deriveUpdatedAt(roundRecord, stat.mtimeMs),
         });
@@ -675,6 +737,140 @@ const loadPublicSkillLibrary = cache(async () => {
   });
 });
 
+const loadPublicCaseSkillLibrary = cache(async () => {
+  const cases = await listPublicCases();
+  const skills = new Map<string, PublicSkillDetail>();
+
+  for (const item of cases) {
+    const payload = readJsonRecord(item.payload);
+    const findings = readJsonList(payload.findings).map((entry) => readJsonRecord(entry));
+
+    for (const [index, finding] of findings.entries()) {
+      const skillId = compactText(finding.reportSkillId);
+      if (!skillId) {
+        continue;
+      }
+
+      const presentation = parseSkillPresentation(skillId);
+      const agentModel = compactText(finding.model);
+      const surfaceId = compactText(finding.findingKey) || `${skillId}-finding-${index + 1}`;
+      const surfaceTitle =
+        compactText(finding.vulnerabilitySurface) ||
+        compactText(finding.harmType) ||
+        compactText(item.title) ||
+        surfaceId;
+
+      const surface: PublicVulnerabilitySummary = {
+        id: [item.slug, surfaceId, agentModel || "unknown-model", String(index + 1)].join(":"),
+        slug: item.slug,
+        skillId,
+        skillLabel: presentation.skillLabel,
+        ownerLabel: presentation.ownerLabel,
+        ordinal: presentation.ordinal,
+        skillDisplayName: presentation.targetLabel,
+        surfaceId,
+        surfaceOrdinal: parseSurfaceOrdinal(surfaceId) || String(index + 1),
+        surfaceTitle,
+        surfaceLevel: compactText(finding.reasonCode) || "-",
+        result: normalizeResult(finding.verdict),
+        riskType: compactText(finding.harmType) || "-",
+        roundCount: Array.isArray(finding.trajectoryTimeline) ? finding.trajectoryTimeline.length : 0,
+        updatedAt: item.publishedAt,
+        attackPrompt: compactText(finding.harmfulPromptPreview),
+        latestAttackPrompt: compactText(finding.harmfulPromptPreview),
+        finalReason:
+          compactText(finding.evidenceSummaryPreview) ||
+          compactText(finding.finalResponsePreview) ||
+          compactText(item.summary),
+        finalRoundId: null,
+        agentModel: agentModel || "-",
+        models: agentModel ? [agentModel] : [],
+      };
+
+      const existing =
+        skills.get(skillId) ||
+        {
+          slug: skillId,
+          skillId,
+          skillLabel: presentation.skillLabel,
+          ownerLabel: presentation.ownerLabel,
+          ordinal: presentation.ordinal,
+          skillDisplayName: presentation.targetLabel,
+          surfaceCount: 0,
+          roundCount: 0,
+          successCount: 0,
+          ignoreCount: 0,
+          technicalCount: 0,
+          riskTypes: [],
+          surfaceLevels: [],
+          agentModels: [],
+          modelCount: 0,
+          skillDescription: "",
+          representativeSummary: "",
+          latestUpdatedAt: null,
+          surfaces: [],
+        };
+
+      if (!skills.has(skillId)) {
+        skills.set(skillId, existing);
+      }
+
+      existing.surfaces.push(surface);
+      existing.surfaceCount += 1;
+      existing.roundCount += surface.roundCount;
+      existing.riskTypes.push(surface.riskType);
+      existing.surfaceLevels.push(surface.surfaceLevel);
+      existing.agentModels.push(...surface.models);
+
+      if (surface.result === "success") {
+        existing.successCount += 1;
+      } else if (surface.result === "technical") {
+        existing.technicalCount += 1;
+      } else if (surface.result === "ignore") {
+        existing.ignoreCount += 1;
+      }
+
+      if (!existing.representativeSummary) {
+        existing.representativeSummary =
+          excerpt(surface.attackPrompt, 200) ||
+          excerpt(surface.finalReason, 200) ||
+          excerpt(item.summary, 200);
+      }
+
+      if (!existing.latestUpdatedAt || millis(surface.updatedAt) > millis(existing.latestUpdatedAt)) {
+        existing.latestUpdatedAt = surface.updatedAt;
+      }
+    }
+  }
+
+  return Array.from(skills.values())
+    .map((skill) => {
+      const agentModels = uniqueSorted(skill.agentModels);
+
+      return {
+        ...skill,
+        riskTypes: uniqueSorted(skill.riskTypes),
+        surfaceLevels: uniqueSorted(skill.surfaceLevels),
+        agentModels,
+        modelCount: agentModels.length,
+        surfaces: [...skill.surfaces].sort((left, right) => {
+          return (
+            millis(right.updatedAt) - millis(left.updatedAt) ||
+            sortSurfaceOrdinals(left.surfaceOrdinal, right.surfaceOrdinal) ||
+            left.surfaceId.localeCompare(right.surfaceId)
+          );
+        }),
+      };
+    })
+    .sort((left, right) => {
+      return (
+        millis(right.latestUpdatedAt) - millis(left.latestUpdatedAt) ||
+        right.surfaceCount - left.surfaceCount ||
+        left.skillId.localeCompare(right.skillId)
+      );
+    });
+});
+
 export async function listPublicSkills(filters: {
   q?: string;
   vuln?: string;
@@ -714,8 +910,23 @@ export async function listPublicSkills(filters: {
 }
 
 export async function getPublicSkillById(skillId: string) {
-  const skills = await loadPublicSkillLibrary();
-  return skills.find((skill) => skill.skillId === skillId) || null;
+  const [caseSkills, staticSkills] = await Promise.all([
+    loadPublicCaseSkillLibrary(),
+    loadPublicSkillLibrary(),
+  ]);
+  const caseSkill = caseSkills.find((skill) => skill.skillId === skillId) || null;
+  const staticSkill = staticSkills.find((skill) => skill.skillId === skillId) || null;
+
+  if (caseSkill && staticSkill) {
+    return {
+      ...caseSkill,
+      skillDescription: caseSkill.skillDescription || staticSkill.skillDescription,
+      representativeSummary:
+        caseSkill.representativeSummary || staticSkill.representativeSummary,
+    };
+  }
+
+  return caseSkill || staticSkill || null;
 }
 
 export async function getPublicSkillLibrarySummary(): Promise<PublicSkillLibrarySummary> {

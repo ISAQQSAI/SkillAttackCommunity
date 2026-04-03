@@ -1,6 +1,6 @@
 import { GuestUploadForm } from "@/components/guest-upload-form";
 import { getLocale } from "@/lib/server/locale";
-import { getUploadPreview } from "@/lib/server/report-submissions";
+import { getSubmittedUpload } from "@/lib/server/report-submissions";
 
 export default async function SubmitPage({
   searchParams,
@@ -10,27 +10,22 @@ export default async function SubmitPage({
   const locale = await getLocale();
   const params = await searchParams;
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
-  const previewToken = Array.isArray(params.previewToken) ? params.previewToken[0] : params.previewToken;
 
-  let initialPreview = null;
+  let initialDisplay = null;
   let initialError: string | null = null;
 
-  if (id && previewToken) {
+  if (id) {
     try {
-      const preview = await getUploadPreview(id, previewToken);
-      initialPreview = {
-        ...preview,
-        previewToken,
-      };
+      initialDisplay = await getSubmittedUpload(id);
     } catch (error) {
-      initialError = error instanceof Error ? error.message : "Could not load preview.";
+      initialError = error instanceof Error ? error.message : "Could not load submission.";
     }
   }
 
   return (
     <GuestUploadForm
       locale={locale}
-      initialPreview={initialPreview}
+      initialDisplay={initialDisplay}
       initialError={initialError}
     />
   );

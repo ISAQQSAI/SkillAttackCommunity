@@ -1,234 +1,234 @@
-import Link from "next/link";
-
-import { AttackPathTimeline } from "@/components/attack-path-timeline";
-import {
-  InsetCard,
-  PageHero,
-  SurfaceCard,
-} from "@/components/page-chrome";
-import { TrajectoryTimeline } from "@/components/trajectory-timeline";
+import { PublicSurfaceDetail } from "@/components/public-surface-detail";
+import { compactDisplayText } from "@/lib/prompt-display";
+import { parseSkillPresentation } from "@/lib/public-presentation";
+import { readJsonList, readJsonRecord } from "@/lib/public-case-routing";
+import { parseDetailedFindingFromBundle } from "@/lib/server/report-bundle-parser";
+import type {
+  PublicSimulationStep,
+  PublicSurfaceDetail as PublicSurfaceDetailRecord,
+} from "@/lib/server/public-skills";
+import { readSubmissionBundle } from "@/lib/server/submission-storage";
 import type { Locale } from "@/lib/i18n";
-import {
-  getPublicCasePath,
-  getPrimaryPublicCaseSkillId,
-  getPublicCaseSkillIds,
-  readJsonList,
-  readJsonRecord,
-} from "@/lib/public-case-routing";
-import { formatVerdictLabel, parseSkillPresentation } from "@/lib/public-presentation";
 import type { getPublicCaseBySlug } from "@/lib/server/report-submissions";
 
 type PublicCaseRecord = NonNullable<Awaited<ReturnType<typeof getPublicCaseBySlug>>>;
 
-function formatDate(locale: Locale, value?: string | Date | null) {
-  if (!value) {
-    return "-";
+function normalizeResult(value: unknown) {
+  const normalized = compactDisplayText(String(value || "")).toLowerCase();
+
+  switch (normalized) {
+    case "attack_success":
+    case "success":
+      return "success";
+    case "technical":
+      return "technical";
+    case "ignored":
+    case "ignore":
+      return "ignore";
+    default:
+      return normalized || "ignore";
   }
-  const date = value instanceof Date ? value : new Date(value);
-  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
 }
 
-function readTrajectorySteps(value: unknown) {
-  return readJsonList(value)
-    .map((item) => {
-      const record = readJsonRecord(item);
-      const status: "ok" | "error" | undefined =
-        record.status === "error" ? "error" : record.status === "ok" ? "ok" : undefined;
+function buildSimulationSteps(
+  finding: Record<string, unknown>,
+  fallbackId: string,
+  fallbackModel: string
+): PublicSimulationStep[] {
+  return readJsonList(finding.trajectoryTimeline)
+    .map((item, index) => {
+      const step = readJsonRecord(item);
+      const stepIndex = Number(step.stepIndex || index + 1);
+
       return {
-        stepIndex: Number(record.stepIndex || 0),
-        relativeMs:
-          typeof record.relativeMs === "number" ? record.relativeMs : Number(record.relativeMs || 0),
-        type: String(record.type || ""),
-        tool: String(record.tool || ""),
-        status,
-        summary: String(record.summary || ""),
+        id: `${fallbackId}-step-${stepIndex}`,
+        stepIndex,
+        type: String(step.type || ""),
+        tool: String(step.tool || ""),
+        content: String(step.summary || ""),
+        isError: step.status === "error",
+        timestamp: null,
+        model: fallbackModel || undefined,
       };
     })
-    .filter((item) => item.summary);
+    .filter((step) => step.content);
 }
 
-export function PublicFindingDetail({
+function buildSurfaceFromFinding({
+  result,
+  finding,
+  findingIndex,
+}: {
+  result: PublicCaseRecord;
+  finding: Record<string, unknown>;
+  findingIndex: number;
+}): PublicSurfaceDetailRecord {
+  const findingKey = String(finding.findingKey || `finding-${findingIndex + 1}`);
+  const skillId = String(finding.reportSkillId || "").trim();
+  const presentation = parseSkillPresentation(skillId);
+  const judgeSummary = readJsonRecord(finding.judgeSummary);
+  const verdict = normalizeResult(finding.verdict || judgeSummary.verdict);
+  const surfaceTitle =
+    String(finding.vulnerabilitySurface || "").trim() ||
+    String(finding.harmType || "").trim() ||
+    result.title;
+  const surfaceLevel = String(finding.reasonCode || "").trim() || "-";
+  const riskType = String(finding.harmType || "").trim() || "-";
+  const attackPrompt = String(finding.harmfulPromptPreview || "").trim();
+  const reason =
+    String(judgeSummary.reason || "").trim() ||
+    String(finding.evidenceSummaryPreview || "").trim() ||
+    String(finding.finalResponsePreview || "").trim();
+  const actionableSuggestion = String(judgeSummary.actionableSuggestion || "").trim();
+  const agentModel = String(finding.model || "").trim();
+  const simulationSteps = buildSimulationSteps(finding, findingKey, agentModel);
+  const updatedAt = result.publishedAt ? new Date(result.publishedAt) : null;
+  const roundCount = Number(judgeSummary.rounds || 1) || 1;
+
+  return {
+    id: `${result.slug}:${findingKey}`,
+    slug: result.slug,
+    skillId,
+    skillLabel: presentation.skillLabel,
+    ownerLabel: presentation.ownerLabel,
+    ordinal: presentation.ordinal,
+    skillDisplayName: presentation.targetLabel || skillId || "-",
+    surfaceId: findingKey,
+    surfaceOrdinal: String(findingIndex + 1),
+    surfaceTitle,
+    surfaceLevel,
+    result: verdict,
+    riskType,
+    roundCount,
+    updatedAt,
+    attackPrompt,
+    latestAttackPrompt: attackPrompt,
+    finalReason: reason,
+    finalRoundId: 1,
+    agentModel: agentModel || "-",
+    models: agentModel ? [agentModel] : [],
+    rounds: [
+      {
+        id: `${findingKey}-round-1`,
+        roundId: 1,
+        phase: "",
+        attackPrompt,
+        result: verdict,
+        reason,
+        riskType,
+        successCondition: "",
+        strategy: "",
+        surfaceTitle,
+        surfaceLevel,
+        actionableSuggestion,
+        attackModel: agentModel || undefined,
+        simulationModel: agentModel || undefined,
+        judgeModel: agentModel || undefined,
+        suggestionModel: agentModel || undefined,
+        simulationSteps,
+        updatedAt,
+      },
+    ],
+  };
+}
+
+async function buildSurfaceWithDetail({
+  result,
+  finding,
+  findingIndex,
+}: {
+  result: PublicCaseRecord;
+  finding: Record<string, unknown>;
+  findingIndex: number;
+}) {
+  const fallbackSurface = buildSurfaceFromFinding({
+    result,
+    finding,
+    findingIndex,
+  });
+  const storageKey = result.submission?.parsedBundle?.storageKey;
+
+  if (!storageKey) {
+    return fallbackSurface;
+  }
+
+  try {
+    const buffer = await readSubmissionBundle(storageKey);
+    const detailedFinding = parseDetailedFindingFromBundle(
+      buffer,
+      String(finding.findingKey || "")
+    );
+
+    if (!detailedFinding || !detailedFinding.rounds.length) {
+      return fallbackSurface;
+    }
+
+    const latestRound = detailedFinding.rounds[detailedFinding.rounds.length - 1];
+
+    return {
+      ...fallbackSurface,
+      skillId: detailedFinding.reportSkillId || fallbackSurface.skillId,
+      surfaceTitle: detailedFinding.vulnerabilitySurface || fallbackSurface.surfaceTitle,
+      surfaceLevel: detailedFinding.reasonCode || latestRound.surfaceLevel || fallbackSurface.surfaceLevel,
+      result: normalizeResult(detailedFinding.verdict || latestRound.result || fallbackSurface.result),
+      riskType: detailedFinding.harmType || latestRound.riskType || fallbackSurface.riskType,
+      roundCount: detailedFinding.rounds.length,
+      attackPrompt: detailedFinding.rounds[0]?.attackPrompt || fallbackSurface.attackPrompt,
+      latestAttackPrompt: latestRound.attackPrompt || fallbackSurface.latestAttackPrompt,
+      finalReason: latestRound.reason || fallbackSurface.finalReason,
+      finalRoundId: latestRound.roundId || fallbackSurface.finalRoundId,
+      agentModel: detailedFinding.model || fallbackSurface.agentModel,
+      models: detailedFinding.model ? [detailedFinding.model] : fallbackSurface.models,
+      rounds: detailedFinding.rounds.map((round, index) => ({
+        id: `${fallbackSurface.surfaceId}-round-${round.roundId || index + 1}`,
+        roundId: round.roundId || index + 1,
+        phase: "",
+        attackPrompt: round.attackPrompt,
+        result: normalizeResult(round.result),
+        reason: round.reason,
+        riskType: round.riskType || detailedFinding.harmType || fallbackSurface.riskType,
+        successCondition: "",
+        strategy: "",
+        surfaceTitle: round.surfaceTitle || fallbackSurface.surfaceTitle,
+        surfaceLevel: round.surfaceLevel || fallbackSurface.surfaceLevel,
+        actionableSuggestion: round.actionableSuggestion,
+        attackModel: round.attackModel || detailedFinding.model || fallbackSurface.agentModel,
+        simulationModel:
+          round.simulationModel || detailedFinding.model || fallbackSurface.agentModel,
+        judgeModel: round.judgeModel || detailedFinding.model || fallbackSurface.agentModel,
+        suggestionModel:
+          round.suggestionModel ||
+          round.judgeModel ||
+          detailedFinding.model ||
+          fallbackSurface.agentModel,
+        simulationSteps: round.simulationSteps.map((step) => ({
+          id: `${fallbackSurface.surfaceId}-round-${round.roundId || index + 1}-step-${step.stepIndex}`,
+          ...step,
+        })),
+        updatedAt: result.publishedAt ? new Date(result.publishedAt) : null,
+      })),
+    } satisfies PublicSurfaceDetailRecord;
+  } catch {
+    return fallbackSurface;
+  }
+}
+
+export async function PublicFindingDetail({
   locale,
   result,
   finding,
-  skillContextId,
+  findingIndex,
 }: {
   locale: Locale;
   result: PublicCaseRecord;
   finding: Record<string, unknown>;
-  skillContextId?: string | null;
+  findingIndex: number;
 }) {
-  const payload = readJsonRecord(result.payload);
-  const bundle = readJsonRecord(payload.bundle);
-  const reports = readJsonList(payload.reports).map((item) => readJsonRecord(item));
-  const coveredSkillIds = getPublicCaseSkillIds(result.payload);
-  const primarySkillId = getPrimaryPublicCaseSkillId(result.payload);
-  const findingSkillId = String(finding.reportSkillId || "").trim();
-  const activeSkillId =
-    findingSkillId && coveredSkillIds.includes(findingSkillId)
-      ? findingSkillId
-      : skillContextId && coveredSkillIds.includes(skillContextId)
-        ? skillContextId
-        : primarySkillId;
-  const activeReport =
-    reports.find((report) => String(report.skillId || "").trim() === activeSkillId) || null;
-  const trajectorySteps = readTrajectorySteps(finding.trajectoryTimeline);
-  const target = parseSkillPresentation(activeSkillId || findingSkillId || "");
+  const surface = await buildSurfaceWithDetail({
+    result,
+    finding,
+    findingIndex,
+  });
 
-  return (
-    <div className="grid gap-6">
-      <PageHero
-        eyebrow={
-          <div className="flex flex-wrap items-center gap-2">
-            <span>{locale === "zh" ? "公开漏洞详情" : "Published vulnerability detail"}</span>
-            <span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-slate-600">
-              {formatDate(locale, result.publishedAt)}
-            </span>
-          </div>
-        }
-        title={String(finding.harmType || "-")}
-        description={
-          <>
-            <span className="block text-slate-600">{String(finding.vulnerabilitySurface || "-")}</span>
-            <span className="mt-3 block text-slate-600">
-              {locale === "zh" ? "收录自：" : "Included in: "} {result.title}
-            </span>
-          </>
-        }
-        actions={
-          <>
-            <Link
-              href={getPublicCasePath({ slug: result.slug, payload: result.payload })}
-              className="rounded-full bg-white px-4 py-2.5 text-sm font-medium text-slate-950 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5"
-            >
-              {locale === "zh" ? "返回本次公开结果" : "Back to this published result"}
-            </Link>
-            <Link
-              href="/vulnerabilities"
-              className="rounded-full border border-black/10 bg-white/90 px-4 py-2.5 text-sm font-medium text-slate-800 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5"
-            >
-              {locale === "zh" ? "返回漏洞列表" : "Back to vulnerabilities"}
-            </Link>
-          </>
-        }
-        aside={
-          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <InsetCard tone="white">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {locale === "zh" ? "受影响对象" : "Affected target"}
-              </div>
-              <div className="mt-3 text-xl font-semibold tracking-[-0.04em] text-slate-950">
-                {target.targetLabel || "-"}
-              </div>
-            </InsetCard>
-            <InsetCard tone="white">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {locale === "zh" ? "公开结论" : "Result"}
-              </div>
-              <div className="mt-3 text-xl font-semibold tracking-[-0.04em] text-slate-950">
-                {formatVerdictLabel(locale, String(finding.verdict || ""))}
-              </div>
-            </InsetCard>
-            <InsetCard tone="tint">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {locale === "zh" ? "轨迹步骤" : "Trajectory steps"}
-              </div>
-              <div className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-slate-950">
-                {trajectorySteps.length}
-              </div>
-            </InsetCard>
-          </div>
-        }
-      />
-
-      <SurfaceCard>
-        <AttackPathTimeline
-          locale={locale}
-          finding={finding}
-          title={locale === "zh" ? "攻击路径" : "Attack path"}
-        />
-      </SurfaceCard>
-
-      <SurfaceCard>
-        <TrajectoryTimeline
-          locale={locale}
-          steps={trajectorySteps}
-          title={locale === "zh" ? "攻击轨迹时间轴" : "Attack trajectory timeline"}
-        />
-      </SurfaceCard>
-
-      <SurfaceCard className="grid gap-3 lg:grid-cols-3">
-        <InsetCard>
-          <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-            {locale === "zh" ? "攻击输入摘要" : "Prompt summary"}
-          </div>
-          <p className="mt-2 leading-7 text-slate-700">
-            {String(finding.harmfulPromptPreview || "-")}
-          </p>
-        </InsetCard>
-        <InsetCard>
-          <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-            {locale === "zh" ? "关键证据" : "Smoking gun"}
-          </div>
-          <p className="mt-2 leading-7 text-slate-700">
-            {String(finding.smokingGunPreview || "-")}
-          </p>
-        </InsetCard>
-        <InsetCard>
-          <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-            {locale === "zh" ? "最终响应摘要" : "Final response summary"}
-          </div>
-          <p className="mt-2 leading-7 text-slate-700">
-            {String(finding.finalResponsePreview || "-")}
-          </p>
-        </InsetCard>
-      </SurfaceCard>
-
-      {payload.verificationSummary ? (
-        <SurfaceCard>
-          <h2 className="text-2xl font-semibold tracking-[-0.04em]">
-            {locale === "zh" ? "发布说明" : "Published note"}
-          </h2>
-          <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-700">
-            {String(payload.verificationSummary)}
-          </p>
-        </SurfaceCard>
-      ) : null}
-
-      {(activeReport?.sourceLink || bundle.source) ? (
-        <SurfaceCard className="grid gap-3 md:grid-cols-2">
-          <InsetCard className="text-sm">
-            <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-              {locale === "zh" ? "公开来源" : "Public reference"}
-            </div>
-            {activeReport?.sourceLink ? (
-              <a
-                href={String(activeReport.sourceLink)}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 inline-flex break-all text-slate-700 underline-offset-4 hover:underline"
-              >
-                {String(activeReport.sourceLink)}
-              </a>
-            ) : (
-              <div className="mt-2 text-slate-800">{String(bundle.source || "-")}</div>
-            )}
-          </InsetCard>
-          <InsetCard className="text-sm">
-            <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-              {locale === "zh" ? "涉及模型" : "Model context"}
-            </div>
-            <div className="mt-2 text-slate-800">
-              {[String(finding.provider || ""), String(finding.model || "")]
-                .filter(Boolean)
-                .join(" · ") || "-"}
-            </div>
-          </InsetCard>
-        </SurfaceCard>
-      ) : null}
-    </div>
-  );
+  return <PublicSurfaceDetail locale={locale} surface={surface} />;
 }

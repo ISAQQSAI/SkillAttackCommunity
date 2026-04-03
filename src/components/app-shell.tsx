@@ -27,7 +27,7 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
     { href: "/home", label: dict.shell.nav.home },
     { href: "/vulnerabilities", label: dict.shell.nav.skills },
     { href: "/submit", label: dict.shell.nav.submit },
-    { href: "/reports", label: locale === "zh" ? "查询提交" : "Track submission" },
+    { href: "/reports", label: dict.shell.nav.reports },
     ...(isReviewArea && viewer && viewer.role === "admin"
       ? [{ href: "/review", label: dict.shell.nav.review }]
       : []),
@@ -47,7 +47,11 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
   const footerLinks = [
     { href: skillAttackLinks.arxivUrl, label: "Paper", external: true },
     { href: skillAttackLinks.repoUrl, label: "GitHub", external: true },
-    { href: "/vulnerabilities", label: "Methodology", external: false },
+    {
+      href: "mailto:uanduan5@gmail.com",
+      label: "Email: uanduan5@gmail.com",
+      external: true,
+    },
   ];
 
   function isActive(href: string) {
@@ -76,7 +80,7 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
               <Link href="/home" className="text-slate-950">
                 <Image
                   src="/skillatlas-logo-5-2-6.svg"
-                  alt="SkillAtlas logo"
+                  alt={locale === "zh" ? "SkillAtlas 标志" : "SkillAtlas logo"}
                   width={128}
                   height={128}
                   unoptimized
@@ -164,7 +168,7 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
             SkillAtlas © 2026
           </span>
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-center sm:gap-x-12">
-            <span>Sanitized public cases</span>
+            <span>{locale === "zh" ? "脱敏公开案例" : "Sanitized public cases"}</span>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:gap-x-5">
               {footerLinks.map((item, index) => (
                 <span key={item.label} className="flex items-center gap-4">

@@ -88,6 +88,24 @@ function renderFilterLink({
 }) {
   const isSelected = value ? selectedValue === value : !selectedValue;
   const isMuted = count === 0 && !isSelected;
+  const content = (
+    <>
+      <div className={filterLabelClass(isSelected, isMuted)}>{value ? label : allLabel || label}</div>
+      <span className={filterCountClass(isSelected, isMuted)}>{formatNumber(locale, count)}</span>
+    </>
+  );
+
+  if (isMuted) {
+    return (
+      <span
+        key={linkKey}
+        aria-disabled="true"
+        className={`${filterChipClass(isSelected, isMuted)} w-full justify-between cursor-not-allowed pointer-events-none`}
+      >
+        {content}
+      </span>
+    );
+  }
 
   return (
     <Link
@@ -96,8 +114,7 @@ function renderFilterLink({
       scroll={false}
       className={`${filterChipClass(isSelected, isMuted)} w-full justify-between`}
     >
-      <div className={filterLabelClass(isSelected, isMuted)}>{value ? label : allLabel || label}</div>
-      <span className={filterCountClass(isSelected, isMuted)}>{formatNumber(locale, count)}</span>
+      {content}
     </Link>
   );
 }
@@ -131,12 +148,16 @@ const RESULT_OPTIONS = ["success", "technical", "ignore"] as const;
 function getResultLabel(locale: Locale, value: (typeof RESULT_OPTIONS)[number]) {
   if (locale === "zh") {
     if (value === "success") {
-      return "success";
+      return "成功";
     }
     if (value === "technical") {
-      return "technical";
+      return "技术问题";
     }
-    return "ignore";
+    return "失败";
+  }
+
+  if (value === "ignore") {
+    return "failed";
   }
 
   return value;
@@ -166,6 +187,9 @@ export function PublicRiskFilterBar({
   selectedResult,
   selectedLevel,
   totalCount,
+  allRiskCount,
+  allResultCount,
+  allLevelCount,
   riskCounts,
   resultCounts,
   levelCounts,
@@ -179,6 +203,9 @@ export function PublicRiskFilterBar({
   selectedResult?: string;
   selectedLevel?: string;
   totalCount: number;
+  allRiskCount?: number;
+  allResultCount?: number;
+  allLevelCount?: number;
   riskCounts: Map<string, number>;
   resultCounts?: Map<string, number>;
   levelCounts?: Map<string, number>;
@@ -193,12 +220,12 @@ export function PublicRiskFilterBar({
       <div className="grid gap-3 border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f2f7fc)] p-3 sm:p-4">
         <div className="grid gap-2">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {locale === "zh" ? "筛选器" : "Filters"}
+            {locale === "zh" ? "共计" : "Total"}
           </div>
           <div className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
             {locale === "zh"
-              ? `${formatNumber(locale, totalCount)} 条轨迹`
-              : `${formatNumber(locale, totalCount)} trajectories`}
+              ? `${formatNumber(locale, totalCount)} 条攻击轨迹`
+              : `${formatNumber(locale, totalCount)} attack traces`}
           </div>
         </div>
 
@@ -210,7 +237,7 @@ export function PublicRiskFilterBar({
             paramName: "result",
             selectedValue: selectedResult,
             label: locale === "zh" ? "全部结果" : "All results",
-            count: totalCount,
+            count: allResultCount ?? totalCount,
             allLabel: locale === "zh" ? "全部结果" : "All results",
           })}
           {RESULT_OPTIONS.map((value) =>
@@ -228,16 +255,16 @@ export function PublicRiskFilterBar({
           )}
         </FilterSection>
 
-        <FilterSection title="Level">
+        <FilterSection title={locale === "zh" ? "风险等级" : "Risk level"}>
           {renderFilterLink({
             locale,
             pathname,
             preservedQuery,
             paramName: "level",
             selectedValue: selectedLevel,
-            label: locale === "zh" ? "全部等级" : "All levels",
-            count: totalCount,
-            allLabel: locale === "zh" ? "全部等级" : "All levels",
+            label: locale === "zh" ? "全部风险等级" : "All risk levels",
+            count: allLevelCount ?? totalCount,
+            allLabel: locale === "zh" ? "全部风险等级" : "All risk levels",
           })}
           {orderedLevels.map((level) =>
             renderFilterLink({
@@ -262,7 +289,7 @@ export function PublicRiskFilterBar({
             paramName: "risk",
             selectedValue: selectedRisk,
             label: locale === "zh" ? "全部风险" : "All risks",
-            count: totalCount,
+            count: allRiskCount ?? totalCount,
             allLabel: locale === "zh" ? "全部风险" : "All risks",
           })}
 
@@ -305,7 +332,7 @@ export function PublicRiskFilterBar({
           paramName: "risk",
           selectedValue: selectedRisk,
           label: locale === "zh" ? "全部风险" : "All risks",
-          count: totalCount,
+          count: allRiskCount ?? totalCount,
           allLabel: locale === "zh" ? "全部风险" : "All risks",
         })}
 

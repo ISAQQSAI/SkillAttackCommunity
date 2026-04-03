@@ -42,10 +42,14 @@ export function formatVerdictLabel(locale: Locale, verdict?: string | null) {
   switch (String(verdict || "").trim()) {
     case "attack_success":
       return locale === "zh" ? "已验证攻击成功" : "Verified exploit";
+    case "success":
+      return locale === "zh" ? "攻击成功" : "Attack success";
     case "technical":
-      return locale === "zh" ? "已确认存在问题" : "Confirmed issue";
+      return locale === "zh" ? "技术问题" : "Technical";
     case "ignored":
       return locale === "zh" ? "未复现成功" : "Not reproduced";
+    case "ignore":
+      return locale === "zh" ? "已忽略" : "Ignored";
     case "":
       return locale === "zh" ? "待补充" : "Pending";
     default:
@@ -55,14 +59,10 @@ export function formatVerdictLabel(locale: Locale, verdict?: string | null) {
 
 export function formatSubmissionStatusLabel(locale: Locale, status?: string | null) {
   switch (String(status || "").trim()) {
-    case "preview_ready":
-      return locale === "zh" ? "预览已准备好" : "Preview ready";
     case "submitted":
       return locale === "zh" ? "已提交审核" : "Submitted for review";
     case "under_review":
       return locale === "zh" ? "审核中" : "In review";
-    case "approved":
-      return locale === "zh" ? "已通过审核" : "Approved";
     case "rejected":
       return locale === "zh" ? "未通过审核" : "Not approved";
     case "published":

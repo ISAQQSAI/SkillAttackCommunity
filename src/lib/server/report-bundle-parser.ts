@@ -32,7 +32,7 @@ export interface ParsedSubmissionFinding {
 
 export interface ParsedSubmissionArtifact {
   kind: "report_json" | "skill_archive" | "metadata";
-  visibility: "admin_only" | "preview_only" | "public_case";
+  visibility: "admin_only" | "public_case";
   fileName: string;
   pathInBundle?: string;
   contentType: string;
@@ -41,7 +41,7 @@ export interface ParsedSubmissionArtifact {
   previewText?: string;
 }
 
-export interface ParsedBundlePreview {
+export interface ParsedBundleDisplay {
   bundle: {
     source: string;
     generatedAt: string;
@@ -93,10 +93,49 @@ export interface ParsedReportBundle {
   bundleMeta: Record<string, unknown>;
   parsedIndex: Record<string, unknown>;
   summaryStats: Record<string, unknown>;
-  previewPayload: ParsedBundlePreview;
-  redactionSummary: ParsedBundlePreview["redactionSummary"];
+  displayPayload: ParsedBundleDisplay;
+  redactionSummary: ParsedBundleDisplay["redactionSummary"];
   findings: ParsedSubmissionFinding[];
   artifacts: ParsedSubmissionArtifact[];
+}
+
+export interface ParsedDetailedSimulationStep {
+  stepIndex: number;
+  type: string;
+  tool: string;
+  content: string;
+  isError: boolean;
+  timestamp: Date | null;
+  model?: string;
+}
+
+export interface ParsedDetailedFindingRound {
+  roundId: number;
+  attackPrompt: string;
+  result: string;
+  reason: string;
+  riskType: string;
+  surfaceLevel: string;
+  surfaceTitle: string;
+  actionableSuggestion: string;
+  attackModel?: string;
+  simulationModel?: string;
+  judgeModel?: string;
+  suggestionModel?: string;
+  simulationSteps: ParsedDetailedSimulationStep[];
+}
+
+export interface ParsedDetailedFinding {
+  reportSkillId: string;
+  sourceLink?: string;
+  harmType: string;
+  vulnerabilitySurface: string;
+  provider?: string;
+  model?: string;
+  verdict?: string;
+  reasonCode?: string;
+  confidence?: number;
+  rounds: ParsedDetailedFindingRound[];
 }
 
 interface SanitizedTextResult {
@@ -112,6 +151,8 @@ const HIDDEN_SECTIONS = [
   "judge.path_delta",
   "skill.skill_zip",
 ];
+
+const DETAIL_TEXT_MAX_LENGTH = 20_000;
 
 const REDACTION_RULES = [
   {
@@ -176,6 +217,38 @@ function compactText(value: unknown) {
   return ensureString(value).replace(/\s+/g, " ").trim();
 }
 
+function readModelName(value: unknown) {
+  if (typeof value === "string") {
+    return compactText(value);
+  }
+
+  const record = ensureRecord(value);
+  return (
+    compactText(record.model) ||
+    compactText(record.primary) ||
+    compactText(record.name)
+  );
+}
+
+function extractConfiguredStageModels(
+  modelConfig: Record<string, unknown>,
+  fallbackModel?: string
+) {
+  const normalizedFallback = compactText(fallbackModel);
+  const attackModel = readModelName(ensureRecord(modelConfig.attacker));
+  const simulationModel = readModelName(ensureRecord(modelConfig.simulator));
+  const judgeModel = readModelName(ensureRecord(modelConfig.judge));
+  const feedbackModel = readModelName(ensureRecord(modelConfig.feedback));
+
+  return {
+    attackModel: attackModel || normalizedFallback || undefined,
+    simulationModel: simulationModel || normalizedFallback || undefined,
+    judgeModel: judgeModel || normalizedFallback || undefined,
+    suggestionModel:
+      feedbackModel || judgeModel || normalizedFallback || undefined,
+  };
+}
+
 function summarizeText(value: string, maxLength: number) {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (!normalized) {
@@ -208,6 +281,34 @@ function sanitizeText(value: unknown, maxLength: number): SanitizedTextResult {
 
   return {
     text: summarizeText(text, maxLength),
+    flags: [...flags],
+    replacements,
+  };
+}
+
+function sanitizeTextDetailed(
+  value: unknown,
+  maxLength = DETAIL_TEXT_MAX_LENGTH
+): SanitizedTextResult {
+  let text = ensureString(value);
+  const flags = new Set<string>();
+  const replacements: Record<string, number> = {};
+
+  for (const rule of REDACTION_RULES) {
+    text = text.replace(rule.pattern, () => {
+      flags.add(rule.flag);
+      replacements[rule.key] = (replacements[rule.key] || 0) + 1;
+      return rule.placeholder;
+    });
+  }
+
+  const normalized = text.trim();
+
+  return {
+    text:
+      normalized.length > maxLength
+        ? `${normalized.slice(0, maxLength - 3).trimEnd()}...`
+        : normalized,
     flags: [...flags],
     replacements,
   };
@@ -292,6 +393,73 @@ function sanitizeStructuredValue(value: unknown, maxLength: number) {
   return sanitizeText(raw, maxLength);
 }
 
+function sanitizeStructuredValueDetailed(
+  value: unknown,
+  maxLength = DETAIL_TEXT_MAX_LENGTH
+) {
+  const raw =
+    typeof value === "string"
+      ? value
+      : value && typeof value === "object"
+        ? JSON.stringify(value, null, 2)
+        : String(value || "");
+  return sanitizeTextDetailed(raw, maxLength);
+}
+
+function toDate(value: unknown) {
+  return typeof value === "number" ? new Date(value) : null;
+}
+
+function buildDetailedSimulationSteps(
+  steps: Array<Record<string, unknown>>,
+  fallbackModel?: string
+): ParsedDetailedSimulationStep[] {
+  return steps
+    .map((step, index) => {
+      const stepType = compactText(step.type) || "unknown";
+      const stepIndex = toNumber(step.step_index) || index + 1;
+      const tool = compactText(step.tool);
+      let sanitized;
+
+      if (stepType === "assistant_message") {
+        sanitized = sanitizeTextDetailed(step.text);
+      } else if (stepType === "tool_call") {
+        const argumentsText =
+          tool === "write"
+            ? {
+                path: ensureRecord(step.arguments).path,
+              }
+            : ensureRecord(step.arguments);
+        sanitized = sanitizeStructuredValueDetailed(
+          tool ? { tool, arguments: argumentsText } : argumentsText
+        );
+      } else if (stepType === "tool_result") {
+        sanitized = sanitizeStructuredValueDetailed(
+          step.result_text ?? step.result ?? step.output
+        );
+      } else {
+        sanitized = sanitizeTextDetailed(
+          step.text ?? step.result_text ?? step.result ?? step.output
+        );
+      }
+
+      return {
+        stepIndex,
+        type: stepType,
+        tool,
+        content: sanitized.text,
+        isError: Boolean(step.is_error) || compactText(step.status).toLowerCase() === "error",
+        timestamp: toDate(step.timestamp),
+        model:
+          readModelName(step.model) ||
+          readModelName(ensureRecord(step.metadata).model) ||
+          compactText(fallbackModel) ||
+          undefined,
+      };
+    })
+    .filter((step) => step.content);
+}
+
 function extractTrajectoryTimeline(agentTrajectory: Record<string, unknown>) {
   const steps = ensureArray<Record<string, unknown>>(agentTrajectory.trajectory);
   const flags = new Set<string>();
@@ -358,8 +526,315 @@ function extractTrajectoryTimeline(agentTrajectory: Record<string, unknown>) {
   };
 }
 
+function parseSurfaceOrdinal(value: string) {
+  const matched = value.match(/^surface_(\d+)/i);
+  return matched ? Number.parseInt(matched[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
+function parseRoundNumber(value: string) {
+  const matched = value.match(/round_(\d+)\.json$/i);
+  return matched ? Number.parseInt(matched[1], 10) : undefined;
+}
+
+function lastAssistantMessage(steps: Array<Record<string, unknown>>) {
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    const step = steps[index];
+    if (compactText(step.type).toLowerCase() === "assistant_message") {
+      const text = compactText(step.text);
+      if (text) {
+        return text;
+      }
+    }
+  }
+  return "";
+}
+
+function pickRunsOrganizeSmokingGun(
+  steps: Array<Record<string, unknown>>,
+  simulation: Record<string, unknown>,
+  judge: Record<string, unknown>
+) {
+  const lastToolResult = [...steps]
+    .reverse()
+    .find((step) => compactText(step.type).toLowerCase() === "tool_result" && compactText(step.result_text));
+
+  if (lastToolResult) {
+    return compactText(lastToolResult.result_text);
+  }
+
+  const firstError = ensureArray<string>(simulation.errors)
+    .map((value) => compactText(value))
+    .find(Boolean);
+  if (firstError) {
+    return firstError;
+  }
+
+  return compactText(judge.reason);
+}
+
+function parseRunsOrganizeBundle(zip: AdmZip): ParsedReportBundle {
+  const analyzeEntries = zip
+    .getEntries()
+    .filter((entry) => /(^|\/)[^/]+\/[^/]+\/[^/]+_analyze\.json$/.test(entry.entryName));
+
+  if (!analyzeEntries.length) {
+    throw new Error(
+      "Unsupported report bundle format. Expected standardized bundle metadata or a runs_organize export."
+    );
+  }
+
+  const findings: ParsedSubmissionFinding[] = [];
+  const artifacts: ParsedSubmissionArtifact[] = [];
+  const previewReports: ParsedBundleDisplay["reports"] = [];
+  const globalFlags = new Set<string>();
+  const globalReplacements: Record<string, number> = {};
+  const modelGroups = new Set<string>();
+  let sortOrder = 0;
+
+  for (const analyzeEntry of analyzeEntries) {
+    const segments = analyzeEntry.entryName.split("/");
+    if (segments.length < 4) {
+      continue;
+    }
+
+    const [, modelGroup, skillId] = segments;
+    const basePath = `${segments[0]}/${modelGroup}/${skillId}`;
+    const analyzePath = analyzeEntry.entryName;
+    const globalReportPath = `${basePath}/${skillId}_global_report.json`;
+    const modelPath = `${basePath}/model.json`;
+    const skillSourcePath = `${basePath}/skill_source.zip`;
+    const analyze = readJsonEntry(zip, analyzePath);
+    const globalReport = zip.getEntry(globalReportPath) ? readJsonEntry(zip, globalReportPath) : {};
+    const modelConfig = zip.getEntry(modelPath) ? readJsonEntry(zip, modelPath) : {};
+    const results = ensureArray<Record<string, unknown>>(analyze.results).sort((left, right) => {
+      return (
+        parseSurfaceOrdinal(compactText(left.id)) - parseSurfaceOrdinal(compactText(right.id)) ||
+        compactText(left.id).localeCompare(compactText(right.id))
+      );
+    });
+    const surfaceSummary = ensureRecord(globalReport.surface_summary);
+    const simulatorModel =
+      compactText(ensureRecord(modelConfig.simulator).model) ||
+      compactText(ensureRecord(modelConfig.attacker).model) ||
+      compactText(modelGroup) ||
+      undefined;
+
+    modelGroups.add(modelGroup);
+
+    previewReports.push({
+      skillId: compactText(analyze.skillname) || skillId,
+      findingCount: results.length,
+      successfulSurfaceCount: results.filter((item) => {
+        const summary = ensureRecord(surfaceSummary[compactText(item.id)]);
+        return compactText(summary.status) === "success";
+      }).length,
+      totalSurfaceCount: results.length,
+      uncoveredSurfaces: [],
+    });
+
+    artifacts.push(
+      {
+        kind: "report_json",
+        visibility: "admin_only",
+        fileName: `${skillId}/analyze.json`,
+        pathInBundle: analyzePath,
+        contentType: "application/json",
+        sizeBytes: entrySize(zip, analyzePath),
+        redactionFlags: [],
+        previewText: entryPreview(zip, analyzePath),
+      },
+      {
+        kind: "report_json",
+        visibility: "admin_only",
+        fileName: `${skillId}/global_report.json`,
+        pathInBundle: globalReportPath,
+        contentType: "application/json",
+        sizeBytes: entrySize(zip, globalReportPath),
+        redactionFlags: [],
+        previewText: entryPreview(zip, globalReportPath),
+      },
+      {
+        kind: "metadata",
+        visibility: "admin_only",
+        fileName: `${skillId}/model.json`,
+        pathInBundle: modelPath,
+        contentType: "application/json",
+        sizeBytes: entrySize(zip, modelPath),
+        redactionFlags: [],
+        previewText: entryPreview(zip, modelPath),
+      }
+    );
+
+    if (zip.getEntry(skillSourcePath)) {
+      artifacts.push({
+        kind: "skill_archive",
+        visibility: "admin_only",
+        fileName: `${skillId}/skill.zip`,
+        pathInBundle: skillSourcePath,
+        contentType: "application/zip",
+        sizeBytes: entrySize(zip, skillSourcePath),
+        redactionFlags: [],
+      });
+    }
+
+    for (const result of results) {
+      const surfaceId = compactText(result.id);
+      const surfaceTitle = compactText(result.title) || surfaceId || "unknown surface";
+      const surfacePath = `${basePath}/${surfaceId}`;
+      const roundPaths = zip
+        .getEntries()
+        .filter((entry) => entry.entryName.startsWith(`${surfacePath}/`) && /round_\d+\.json$/.test(entry.entryName))
+        .map((entry) => entry.entryName)
+        .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+      const rounds = roundPaths.map((entryName) => readJsonEntry(zip, entryName));
+      const finalRound = rounds[rounds.length - 1] || {};
+      const finalJudge = ensureRecord(finalRound.judge);
+      const finalSimulation = ensureRecord(finalRound.simulation);
+      const steps = ensureArray<Record<string, unknown>>(finalSimulation.steps);
+      const harmfulPrompt = sanitizeText(ensureRecord(finalRound.attack).attack_prompt, 640);
+      const smokingGun = sanitizeText(
+        pickRunsOrganizeSmokingGun(steps, finalSimulation, finalJudge),
+        420
+      );
+      const evidenceSummary = sanitizeText(
+        compactText(finalJudge.reason) || compactText(result.description),
+        360
+      );
+      const finalResponse = sanitizeText(lastAssistantMessage(steps), 420);
+      const trajectoryTimeline = extractTrajectoryTimeline({ trajectory: steps });
+
+      mergeReplacements(globalReplacements, harmfulPrompt.replacements);
+      mergeReplacements(globalReplacements, smokingGun.replacements);
+      mergeReplacements(globalReplacements, evidenceSummary.replacements);
+      mergeReplacements(globalReplacements, finalResponse.replacements);
+      mergeReplacements(globalReplacements, trajectoryTimeline.replacements);
+
+      for (const flag of [
+        ...harmfulPrompt.flags,
+        ...smokingGun.flags,
+        ...evidenceSummary.flags,
+        ...finalResponse.flags,
+        ...trajectoryTimeline.flags,
+      ]) {
+        globalFlags.add(flag);
+      }
+
+      const perFindingFlags = [
+        ...new Set([
+          ...harmfulPrompt.flags,
+          ...smokingGun.flags,
+          ...evidenceSummary.flags,
+          ...finalResponse.flags,
+          ...trajectoryTimeline.flags,
+        ]),
+      ];
+      const summary = ensureRecord(surfaceSummary[surfaceId]);
+
+      findings.push({
+        sortOrder,
+        reportPath: analyzePath,
+        reportSkillId: compactText(analyze.skillname) || skillId,
+        skillHash: compactText(analyze.skillhash) || undefined,
+        findingKey: surfaceId || `${skillId}-finding-${sortOrder + 1}`,
+        harmType:
+          compactText(summary.final_risk_type) ||
+          compactText(result.risk_type) ||
+          "unknown",
+        vulnerabilitySurface: surfaceTitle,
+        model: simulatorModel,
+        verdict: compactText(summary.status) || compactText(finalJudge.result) || undefined,
+        reasonCode: compactText(result.level) || undefined,
+        harmfulPromptPreview: harmfulPrompt.text,
+        smokingGunPreview: smokingGun.text || undefined,
+        evidenceSummaryPreview: evidenceSummary.text || undefined,
+        finalResponsePreview: finalResponse.text || undefined,
+        trajectoryTimeline: trajectoryTimeline.timeline,
+        redactionFlags: perFindingFlags,
+        judgeSummary: {
+          verdict: compactText(summary.status) || compactText(finalJudge.result) || undefined,
+          reason: compactText(finalJudge.reason) || undefined,
+          actionableSuggestion: compactText(finalJudge.actionable_suggestion) || undefined,
+          rounds: roundPaths.length,
+        },
+      });
+
+      sortOrder += 1;
+    }
+  }
+
+  const redactionSummary = {
+    flags: [...globalFlags],
+    replacements: globalReplacements,
+    hiddenSections: HIDDEN_SECTIONS,
+  };
+
+  return {
+    bundleMeta: {
+      source: "runs_organize",
+      generated_at: "",
+      report_mode: "runs_organize",
+      skill_count: previewReports.length,
+      report_count: previewReports.length,
+      summary_excerpt: {
+        modelGroups: [...modelGroups].sort(),
+      },
+    },
+    parsedIndex: {
+      reports: previewReports.map((report) => ({
+        skill_id: report.skillId,
+        finding_count: report.findingCount,
+        successful_surface_count: report.successfulSurfaceCount,
+        total_surface_count: report.totalSurfaceCount,
+      })),
+    },
+    summaryStats: {
+      modelGroups: [...modelGroups].sort(),
+      skillCount: previewReports.length,
+      findingCount: findings.length,
+    },
+    displayPayload: {
+      bundle: {
+        source: "runs_organize",
+        generatedAt: "",
+        reportMode: "runs_organize",
+        skillCount: previewReports.length,
+        reportCount: previewReports.length,
+        summaryExcerpt: {
+          modelGroups: [...modelGroups].sort(),
+        },
+      },
+      reports: previewReports,
+      findings: findings.map((finding) => ({
+        reportSkillId: finding.reportSkillId,
+        findingKey: finding.findingKey,
+        harmType: finding.harmType,
+        vulnerabilitySurface: finding.vulnerabilitySurface,
+        provider: finding.provider,
+        model: finding.model,
+        verdict: finding.verdict,
+        reasonCode: finding.reasonCode,
+        confidence: finding.confidence,
+        harmfulPromptPreview: finding.harmfulPromptPreview,
+        smokingGunPreview: finding.smokingGunPreview,
+        evidenceSummaryPreview: finding.evidenceSummaryPreview,
+        finalResponsePreview: finding.finalResponsePreview,
+        trajectoryTimeline: finding.trajectoryTimeline,
+        redactionFlags: finding.redactionFlags,
+      })),
+      redactionSummary,
+    },
+    redactionSummary,
+    findings,
+    artifacts,
+  };
+}
+
 export function parseReportBundle(buffer: Buffer): ParsedReportBundle {
   const zip = new AdmZip(buffer);
+  if (!zip.getEntry("bundle_meta.json") || !zip.getEntry("standardized_reports/index.json")) {
+    return parseRunsOrganizeBundle(zip);
+  }
+
   const bundleMeta = readJsonEntry(zip, "bundle_meta.json");
   const parsedIndex = readJsonEntry(zip, "standardized_reports/index.json");
   const summaryByGroup = zip.getEntry("summary_by_group.json")
@@ -393,7 +868,7 @@ export function parseReportBundle(buffer: Buffer): ParsedReportBundle {
 
   const globalFlags = new Set<string>();
   const globalReplacements: Record<string, number> = {};
-  const previewReports: ParsedBundlePreview["reports"] = [];
+  const previewReports: ParsedBundleDisplay["reports"] = [];
 
   let sortOrder = 0;
 
@@ -518,7 +993,7 @@ export function parseReportBundle(buffer: Buffer): ParsedReportBundle {
     hiddenSections: HIDDEN_SECTIONS,
   };
 
-  const previewPayload: ParsedBundlePreview = {
+  const displayPayload: ParsedBundleDisplay = {
     bundle: {
       source: compactText(bundleMeta.source) || "unknown",
       generatedAt: compactText(bundleMeta.generated_at),
@@ -552,9 +1027,205 @@ export function parseReportBundle(buffer: Buffer): ParsedReportBundle {
     bundleMeta,
     parsedIndex,
     summaryStats: summaryByGroup,
-    previewPayload,
+    displayPayload,
     redactionSummary,
     findings,
     artifacts,
   };
+}
+
+function parseDetailedFindingFromRunsOrganize(
+  zip: AdmZip,
+  normalizedFindingKey: string
+): ParsedDetailedFinding | null {
+  const analyzeEntries = zip
+    .getEntries()
+    .filter((entry) => /(^|\/)[^/]+\/[^/]+\/[^/]+_analyze\.json$/.test(entry.entryName));
+
+  for (const analyzeEntry of analyzeEntries) {
+    const segments = analyzeEntry.entryName.split("/");
+    if (segments.length < 4) {
+      continue;
+    }
+
+    const [, modelGroup, skillId] = segments;
+    const basePath = `${segments[0]}/${modelGroup}/${skillId}`;
+    const analyze = readJsonEntry(zip, analyzeEntry.entryName);
+    const globalReportPath = `${basePath}/${skillId}_global_report.json`;
+    const modelPath = `${basePath}/model.json`;
+    const globalReport = zip.getEntry(globalReportPath) ? readJsonEntry(zip, globalReportPath) : {};
+    const modelConfig = zip.getEntry(modelPath) ? readJsonEntry(zip, modelPath) : {};
+    const surfaceSummary = ensureRecord(globalReport.surface_summary);
+    const simulatorModel =
+      compactText(ensureRecord(modelConfig.simulator).model) ||
+      compactText(ensureRecord(modelConfig.attacker).model) ||
+      compactText(modelGroup) ||
+      undefined;
+    const stageModels = extractConfiguredStageModels(modelConfig, simulatorModel);
+
+    for (const result of ensureArray<Record<string, unknown>>(analyze.results)) {
+      const surfaceId = compactText(result.id);
+
+      if (surfaceId !== normalizedFindingKey) {
+        continue;
+      }
+
+      const surfaceTitle = compactText(result.title) || surfaceId || "unknown surface";
+      const surfacePath = `${basePath}/${surfaceId}`;
+      const roundPaths = zip
+        .getEntries()
+        .filter((entry) => entry.entryName.startsWith(`${surfacePath}/`) && /round_\d+\.json$/.test(entry.entryName))
+        .map((entry) => entry.entryName)
+        .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+      const summary = ensureRecord(surfaceSummary[surfaceId]);
+      const lastRoundPath = roundPaths[roundPaths.length - 1];
+      const lastRoundJudge = lastRoundPath
+        ? ensureRecord(readJsonEntry(zip, lastRoundPath).judge)
+        : {};
+      const rounds = roundPaths.map((entryName, index) => {
+        const roundRecord = readJsonEntry(zip, entryName);
+        const attack = ensureRecord(roundRecord.attack);
+        const judge = ensureRecord(roundRecord.judge);
+        const simulation = ensureRecord(roundRecord.simulation);
+        const metadata = ensureRecord(attack.metadata);
+        const target = ensureRecord(attack.target);
+        const roundId =
+          toNumber(roundRecord.round_id) ??
+          toNumber(metadata.round_id) ??
+          parseRoundNumber(entryName) ??
+          index + 1;
+
+        return {
+          roundId,
+          attackPrompt: sanitizeTextDetailed(attack.attack_prompt).text,
+          result: compactText(judge.result) || compactText(summary.status) || "ignore",
+          reason:
+            sanitizeTextDetailed(judge.reason).text ||
+            sanitizeTextDetailed(simulation.errors).text,
+          riskType:
+            compactText(target.risk_type) ||
+            compactText(result.risk_type) ||
+            compactText(summary.final_risk_type) ||
+            "unknown",
+          surfaceLevel:
+            compactText(metadata.surface_level) || compactText(result.level) || "-",
+          surfaceTitle:
+            compactText(metadata.surface_title) || surfaceTitle,
+          actionableSuggestion: sanitizeTextDetailed(judge.actionable_suggestion).text,
+          attackModel: stageModels.attackModel,
+          simulationModel: stageModels.simulationModel,
+          judgeModel: stageModels.judgeModel,
+          suggestionModel: stageModels.suggestionModel,
+          simulationSteps: buildDetailedSimulationSteps(
+            ensureArray<Record<string, unknown>>(simulation.steps),
+            stageModels.simulationModel
+          ),
+        };
+      });
+
+      return {
+        reportSkillId: compactText(analyze.skillname) || skillId,
+        harmType:
+          compactText(summary.final_risk_type) ||
+          compactText(result.risk_type) ||
+          "unknown",
+        vulnerabilitySurface: surfaceTitle,
+        model: simulatorModel,
+        verdict:
+          compactText(summary.status) ||
+          compactText(lastRoundJudge.result) ||
+          undefined,
+        reasonCode: compactText(result.level) || undefined,
+        rounds,
+      };
+    }
+  }
+
+  return null;
+}
+
+function parseDetailedFindingFromStandardizedBundle(
+  zip: AdmZip,
+  normalizedFindingKey: string
+): ParsedDetailedFinding | null {
+  const parsedIndex = readJsonEntry(zip, "standardized_reports/index.json");
+  const reportEntries = ensureArray<Record<string, unknown>>(parsedIndex.reports);
+
+  for (const reportEntry of reportEntries) {
+    const reportPath = ensureString(reportEntry.report_path);
+    const reportSkillId = compactText(reportEntry.skill_id);
+    const reportJson = readJsonEntry(zip, reportPath);
+    const skill = ensureRecord(reportJson.skill);
+
+    for (const finding of ensureArray<Record<string, unknown>>(reportJson.findings)) {
+      const findingId = compactText(finding.finding_id);
+
+      if (findingId !== normalizedFindingKey) {
+        continue;
+      }
+
+      const trajectory = ensureRecord(finding.agent_trajectory);
+      const observations = ensureRecord(trajectory.execution_observations);
+      const judge = ensureRecord(finding.judge);
+      const stageModels = extractConfiguredStageModels(
+        {},
+        compactText(observations.model) || undefined
+      );
+
+      return {
+        reportSkillId,
+        sourceLink: sanitizeSourceLink(skill.source_link),
+        harmType: compactText(finding.harm_type) || "unknown",
+        vulnerabilitySurface: compactText(finding.vulnerability_surface) || "unknown",
+        provider: compactText(observations.provider) || undefined,
+        model: compactText(observations.model) || undefined,
+        verdict: compactText(judge.verdict) || undefined,
+        reasonCode: compactText(judge.reason_code) || undefined,
+        confidence: toNumber(judge.confidence),
+        rounds: [
+          {
+            roundId: 1,
+            attackPrompt: sanitizeTextDetailed(finding.harmful_prompt).text,
+            result: compactText(judge.verdict) || "ignore",
+            reason:
+              sanitizeTextDetailed(judge.reason).text ||
+              sanitizeTextDetailed(pickEvidenceSummary(observations, judge)).text,
+            riskType: compactText(finding.harm_type) || "unknown",
+            surfaceLevel: compactText(judge.reason_code) || "-",
+            surfaceTitle: compactText(finding.vulnerability_surface) || "unknown",
+            actionableSuggestion: sanitizeTextDetailed(judge.actionable_suggestion).text,
+            attackModel: stageModels.attackModel,
+            simulationModel: stageModels.simulationModel,
+            judgeModel: stageModels.judgeModel,
+            suggestionModel: stageModels.suggestionModel,
+            simulationSteps: buildDetailedSimulationSteps(
+              ensureArray<Record<string, unknown>>(trajectory.trajectory),
+              stageModels.simulationModel
+            ),
+          },
+        ],
+      };
+    }
+  }
+
+  return null;
+}
+
+export function parseDetailedFindingFromBundle(
+  buffer: Buffer,
+  findingKey: string
+): ParsedDetailedFinding | null {
+  const normalizedFindingKey = compactText(findingKey);
+
+  if (!normalizedFindingKey) {
+    return null;
+  }
+
+  const zip = new AdmZip(buffer);
+
+  if (!zip.getEntry("bundle_meta.json") || !zip.getEntry("standardized_reports/index.json")) {
+    return parseDetailedFindingFromRunsOrganize(zip, normalizedFindingKey);
+  }
+
+  return parseDetailedFindingFromStandardizedBundle(zip, normalizedFindingKey);
 }

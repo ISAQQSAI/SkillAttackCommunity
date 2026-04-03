@@ -47,6 +47,36 @@ export function getPrimaryPublicCaseSkillId(payload: unknown) {
   return reportSkillId || null;
 }
 
+export function getPrimaryPublicFindingKey(payload: unknown) {
+  const record = readJsonRecord(payload);
+  const findings = readJsonList(record.findings);
+  const firstFindingKey = normalizeId(readJsonRecord(findings[0]).findingKey);
+  return firstFindingKey || null;
+}
+
+export function findPublicCaseFinding(payload: unknown, findingKey: string) {
+  const record = readJsonRecord(payload);
+  const findings = readJsonList(record.findings).map((item) => readJsonRecord(item));
+  const normalizedFindingKey = normalizeId(findingKey);
+
+  if (!normalizedFindingKey) {
+    return null;
+  }
+
+  const index = findings.findIndex(
+    (item) => normalizeId(item.findingKey) === normalizedFindingKey
+  );
+
+  if (index < 0) {
+    return null;
+  }
+
+  return {
+    finding: findings[index],
+    index,
+  };
+}
+
 export function getPublicCasePath({
   slug,
 }: {
@@ -69,7 +99,14 @@ export function getPublicFindingPath({
   payload?: unknown;
   preferredSkillId?: string | null;
 }) {
-  return getPublicCasePath({ slug, payload, preferredSkillId });
+  const normalizedSlug = encodeURIComponent(slug);
+  const normalizedFindingKey = encodeURIComponent(normalizeId(findingKey));
+
+  if (!normalizedFindingKey) {
+    return getPublicCasePath({ slug, payload, preferredSkillId });
+  }
+
+  return `/vulnerabilities/${normalizedSlug}/${normalizedFindingKey}`;
 }
 
 export { readJsonList, readJsonRecord };

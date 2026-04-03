@@ -14,11 +14,11 @@ export default async function ReportDetailFallbackPage({
   return (
     <div className="grid gap-6">
       <PageHero
-        title={locale === "zh" ? "需要 tracking token" : "Tracking token required"}
+        title={locale === "zh" ? "使用提交编号查询" : "Look up by submission number"}
         description={
           locale === "zh"
-            ? "新的 guest 提交流程不再使用旧的按账号查看详情页。请使用 submission ID 和 tracking token 到状态查询页查看审核进度。"
-            : "The guest submission flow no longer uses the legacy account-bound detail page. Use your submission ID and tracking token on the tracking page instead."
+            ? "新的提交流程统一通过提交编号查询状态。直接带着当前 ID 去状态查询页即可。"
+            : "The current submission flow uses the submission number as the lookup key. Open the tracking page with this ID."
         }
         actions={
           <>

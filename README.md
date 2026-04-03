@@ -5,10 +5,10 @@ SkillAtlas is a public-safe report community for agent and skill security.
 The production workflow is:
 
 - guest uploads a `report_bundle.zip`
-- the server parses and redacts it into a structured preview
-- guest confirms the preview and formally submits it
+- the server parses and stores it into a structured display result
+- the upload is submitted immediately and returns a submission ID
 - admin reviews the original bundle plus the sanitized preview from a local-only review backend
-- approved submissions become public-safe case pages
+- approved submissions become public-safe case pages immediately
 
 Raw bundles, raw JSON, full trajectories, and skill archives are not exposed in the public UI.
 
@@ -16,9 +16,9 @@ Raw bundles, raw JSON, full trajectories, and skill archives are not exposed in 
 
 - Guest submission
   - upload a standardized zip bundle
-  - inspect the redacted preview
+  - inspect the parsed display result
   - submit without registering
-  - receive a submission ID and tracking token
+  - receive a submission ID
 - Admin review
   - open the review queue
   - inspect sanitized findings and download the original bundle

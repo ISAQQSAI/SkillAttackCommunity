@@ -1,5 +1,7 @@
 import { CommunityHomePage } from "@/components/community-home-page";
 
+export const dynamic = "force-dynamic";
+
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }

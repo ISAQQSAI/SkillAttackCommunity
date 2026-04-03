@@ -28,7 +28,7 @@ function formatDate(locale: string, value?: string | Date | null) {
   }).format(date);
 }
 
-function readPayloadPreview(value: unknown) {
+function readDisplayPayload(value: unknown) {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
@@ -59,11 +59,11 @@ export default async function ReviewDetailPage({
     notFound();
   }
 
-  const preview = readPayloadPreview(submission.previewPayload);
-  const previewFindings = Array.isArray(preview.findings)
-    ? (preview.findings as Array<Record<string, unknown>>)
+  const display = readDisplayPayload(submission.displayPayload);
+  const displayFindings = Array.isArray(display.findings)
+    ? (display.findings as Array<Record<string, unknown>>)
     : [];
-  const redactionSummary = readPayloadPreview(submission.redactionSummary);
+  const redactionSummary = readDisplayPayload(submission.redactionSummary);
 
   return (
     <div className="grid gap-6">
@@ -83,8 +83,8 @@ export default async function ReviewDetailPage({
         title={submission.originalFilename}
         description={
           locale === "zh"
-            ? "这是 guest 正式提交后的审核详情页。管理员可以下载原始 bundle，同时基于脱敏预览决定是否通过审核和发布。"
-            : "This is the admin review detail page for a formally submitted guest bundle. Admins can download the original bundle while using the sanitized preview to approve or publish it."
+            ? "这是正式提交后的审核详情页。管理员可以下载原始 bundle，并基于脱敏后的展示结果决定拒绝，或审核通过后直接公开。"
+            : "This is the admin review detail page for a submitted bundle. Admins can download the raw bundle and use the sanitized display result to either reject it or publish it immediately."
         }
         actions={
           <>
@@ -125,10 +125,16 @@ export default async function ReviewDetailPage({
               <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                 {locale === "zh" ? "提取 findings" : "Extracted findings"}
               </div>
-              <div className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-slate-950">{previewFindings.length}</div>
+              <div className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-slate-950">{displayFindings.length}</div>
             </InsetCard>
           </div>
         }
+      />
+
+      <AdminSubmissionActions
+        submissionId={submission.publicId}
+        locale={locale}
+        currentStatus={submission.status}
       />
 
       <section className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
@@ -200,7 +206,7 @@ export default async function ReviewDetailPage({
           </SurfaceCard>
 
           <section className="grid gap-4">
-            {previewFindings.map((finding) => (
+            {displayFindings.map((finding) => (
               <SurfaceCard key={String(finding.findingKey)} className="grid gap-4">
                 <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
                   <span className="border border-slate-300 bg-slate-50 px-3 py-1">{String(finding.reportSkillId || "-")}</span>
@@ -243,17 +249,6 @@ export default async function ReviewDetailPage({
         </div>
 
         <div className="grid gap-4">
-          <AdminSubmissionActions
-            submissionId={submission.publicId}
-            locale={locale}
-            currentStatus={submission.status}
-            currentTitle={submission.publicCase?.title}
-            currentSummary={submission.publicCase?.summary}
-            currentSlug={submission.publicCase?.slug}
-            currentVerificationSummary={submission.verificationSummary}
-            hasPublicCase={Boolean(submission.publicCase)}
-          />
-
           <SurfaceCard>
             <SectionHeading
               title={locale === "zh" ? "审核历史" : "Review history"}

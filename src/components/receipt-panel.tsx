@@ -91,15 +91,18 @@ export function ReceiptPanel({
   }
 
   return (
-    <InsetCard className="grid gap-4 p-5">
+    <InsetCard tone="white" className="grid gap-4 border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f4f8fd)] p-5">
       <div className="grid gap-1.5">
-        <h3 className="text-lg font-semibold tracking-[-0.03em] text-slate-950">{title}</h3>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          {locale === "zh" ? "提交凭据" : "Submission receipt"}
+        </div>
+        <h3 className="text-[1.55rem] font-semibold tracking-[-0.04em] text-slate-950">{title}</h3>
         <p className="text-sm leading-7 text-slate-600">{description}</p>
       </div>
 
       <div className="grid gap-3">
         {fields.map((field) => (
-          <InsetCard key={field.label} tone="white" className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+          <InsetCard key={field.label} tone="white" className="grid gap-3 border-slate-200 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
             <div className="min-w-0">
               <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{field.label}</div>
               <div className="mt-2 break-all text-sm font-medium text-slate-800">{field.value}</div>

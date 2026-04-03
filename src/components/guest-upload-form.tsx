@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   actionButtonClass,
@@ -11,36 +11,30 @@ import {
   SectionHeading,
   SurfaceCard,
 } from "@/components/page-chrome";
+import { PublicVulnerabilityCard } from "@/components/public-vulnerability-card";
 import { ReceiptPanel } from "@/components/receipt-panel";
 import type { Locale } from "@/lib/i18n";
 import {
   formatSubmissionStatusLabel,
-  formatVerdictLabel,
   getFriendlyHiddenSectionLabel,
   parseSkillPresentation,
 } from "@/lib/public-presentation";
+import type { PublicVulnerabilitySummary } from "@/lib/server/public-skills";
 import { LAST_SUBMISSION_STORAGE_KEY } from "@/lib/submission-receipt";
-import type { ParsedBundlePreview } from "@/lib/server/report-bundle-parser";
+import type { ParsedBundleDisplay } from "@/lib/server/report-bundle-parser";
 
-interface UploadPreviewState {
-  submissionId: string;
-  previewToken: string;
-  status: string;
-  previewReadyAt?: string | Date | null;
-  preview: ParsedBundlePreview;
-  redactionSummary?: unknown;
-}
-
-interface SubmitResultState {
+interface UploadDisplayState {
   submissionId: string;
   status: string;
   submittedAt?: string | Date | null;
-  trackingToken: string;
+  display: ParsedBundleDisplay;
+  redactionSummary?: unknown;
+  dedupedFromSubmissionId?: string | null;
 }
 
 interface GuestUploadFormProps {
   locale: Locale;
-  initialPreview?: UploadPreviewState | null;
+  initialDisplay?: UploadDisplayState | null;
   initialError?: string | null;
 }
 
@@ -55,49 +49,100 @@ function formatDate(locale: Locale, value?: string | null) {
   }).format(date);
 }
 
+function normalizePreviewResult(verdict?: string | null) {
+  switch (String(verdict || "").trim().toLowerCase()) {
+    case "success":
+    case "attack_success":
+      return "success";
+    case "technical":
+      return "technical";
+    case "ignore":
+    case "ignored":
+      return "ignore";
+    default:
+      return "pending";
+  }
+}
+
+function createPreviewCard(
+  displayState: UploadDisplayState,
+  finding: ParsedBundleDisplay["findings"][number],
+  index: number
+): PublicVulnerabilitySummary {
+  const presentation = parseSkillPresentation(finding.reportSkillId);
+  const agentModel = String(finding.model || finding.provider || "").trim();
+  const submittedAt = displayState.submittedAt ? new Date(displayState.submittedAt) : null;
+  const surfaceId = String(finding.findingKey || `finding-${index + 1}`);
+  const finalReason =
+    String(finding.evidenceSummaryPreview || "").trim() ||
+    String(finding.finalResponsePreview || "").trim() ||
+    String(finding.smokingGunPreview || "").trim() ||
+    String(finding.harmfulPromptPreview || "").trim();
+
+  return {
+    id: `${displayState.submissionId}:${surfaceId}:${agentModel || "unknown"}:${index}`,
+    slug: `preview-${displayState.submissionId}-${surfaceId}-${index}`,
+    skillId: finding.reportSkillId,
+    skillLabel: presentation.skillLabel,
+    ownerLabel: presentation.ownerLabel,
+    ordinal: presentation.ordinal,
+    skillDisplayName: presentation.targetLabel || presentation.skillLabel || finding.reportSkillId,
+    surfaceId,
+    surfaceOrdinal: presentation.ordinal,
+    surfaceTitle:
+      String(finding.vulnerabilitySurface || "").trim() ||
+      String(finding.harmType || "").trim() ||
+      surfaceId,
+    surfaceLevel: String(finding.reasonCode || "").trim() || "Pending",
+    result: normalizePreviewResult(finding.verdict),
+    riskType: String(finding.harmType || "").trim() || "-",
+    roundCount: Array.isArray(finding.trajectoryTimeline) ? finding.trajectoryTimeline.length : 0,
+    updatedAt: submittedAt,
+    attackPrompt: String(finding.harmfulPromptPreview || "").trim(),
+    latestAttackPrompt: String(finding.harmfulPromptPreview || "").trim(),
+    finalReason,
+    finalRoundId: null,
+    agentModel: agentModel || "-",
+    models: agentModel ? [agentModel] : [],
+  };
+}
+
 export function GuestUploadForm({
   locale,
-  initialPreview = null,
+  initialDisplay = null,
   initialError = null,
 }: GuestUploadFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(initialError);
-  const [previewState, setPreviewState] = useState<UploadPreviewState | null>(initialPreview);
-  const [submittedState, setSubmittedState] = useState<SubmitResultState | null>(null);
+  const [displayState, setDisplayState] = useState<UploadDisplayState | null>(initialDisplay);
   const [submitterLabel, setSubmitterLabel] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [submissionNotes, setSubmissionNotes] = useState("");
 
   const copy =
     locale === "zh"
-      ? {
-          title: "提交漏洞报告",
-          body:
-            "直接上传 `report_bundle.zip`。系统会先生成一份可公开预览，让你确认展示内容没有问题；只有在你确认后，才会正式进入审核流程。",
+        ? {
+          title: "提交轨迹报告",
+          body: "",
           chooseFile: "选择 zip 文件",
-          upload: "上传并查看预览",
-          uploading: "解析中...",
+          upload: "上传并提交",
+          uploading: "上传中...",
           replace: "重新上传其他文件",
-          preview: "可公开预览",
-          previewBody:
-            "下面这份内容就是公开页最终会展示的样子。你可以重点确认标题、影响摘要、证据摘要和对象信息是否适合公开。",
-          bundleSummary: "公开预览概览",
-          reportCount: "涉及对象",
-          findingCount: "将公开的漏洞条目",
-          redaction: "隐私处理概览",
+          display: "提交结果",
+          displayBody: "这里显示脱敏后的摘要。",
+          bundleSummary: "结果概览",
+          reportCount: "对象数",
+          findingCount: "漏洞条目",
+          redaction: "隐私处理",
           hiddenSections: "不会公开的内容",
-          replacements: "自动隐藏的敏感信息",
+          replacements: "已隐藏的敏感信息",
           submitterLabel: "你的称呼（可选）",
           contactEmail: "联系邮箱（可选）",
           notes: "给管理员的备注（可选）",
-          confirm: "确认并正式提交",
-          submitting: "提交中...",
-          tracking: "已生成查询回执",
-          trackingBody:
-            "下面这两项就是后续查询进度要用到的回执。建议你立刻复制或下载保存。",
-          openTracker: "打开状态页",
+          tracking: "提交编号",
+          trackingBody: "保存这个编号，用来查询进度。",
+          openTracker: "查询进度",
           skill: "受影响对象",
           verdict: "判定",
           confidence: "置信度",
@@ -106,54 +151,47 @@ export function GuestUploadForm({
           smokingGun: "关键证据",
           finalResponse: "最终响应摘要",
           generated: "生成时间",
+          submittedAt: "提交时间",
           status: "状态",
-          previewToken: "预览回执",
           submissionId: "提交编号",
-          trackingToken: "查询回执",
-          uploadPanel: "上传入口",
-          uploadPanelBody: "选择 zip 压缩包后，系统会先生成一份公开预览，不会直接展示任何原始内容。",
-          privacyPanel: "上传前你会看到什么",
-          privacyBody: "你会先检查公开预览，确认别人最终会看到的标题、摘要、对象和证据片段。",
-          reviewPanel: "正式提交后",
-          reviewBody: "你会拿到提交编号和查询回执，用它们在查询页查看进度、审核结论和公开状态。",
-          submitPanel: "正式提交",
-          submitPanelBody: "确认预览内容没有问题后，再补充可选信息并提交。",
-          browseTracker: "打开查询页",
-          previewReceiptTitle: "预览回执",
-          previewReceiptBody: "如果你想稍后回来继续确认预览，先把这份回执保存下来。",
-          trackingReceiptTitle: "查询回执",
-          trackingReceiptBody: "后续查看审核进度就靠这份回执，建议复制并下载保存。",
-          copyHint: "这份回执可以复制，也可以直接下载成文本保存。",
+          uploadPanel: "上传报告",
+          uploadPanelBody: "上传后将会显示脱敏后的轨迹信息，内容在审核通过前不会公开。",
+          privacyEyebrow: "报告内容",
+          privacyPanel: "提交摘要",
+          privacyBody: "此处显示脱敏后的摘要信息。",
+          privacyNote: "内容在审核通过前不会公开。",
+          reviewPanel: "查询进度",
+          reviewBody: "上传后可用提交编号查询进度。",
+          browseTracker: "去查询页",
+          trackingReceiptTitle: "提交回执",
+          trackingReceiptBody: "保存这个编号，后续查询会用到。",
+          copyHint: "可复制或下载保存。",
+          dedupeNotice: "检测到相同 zip，已复用解析结果，并生成新的提交编号。",
           stepOne: "上传 zip 文件",
-          stepTwo: "检查可公开预览",
-          stepThree: "提交并拿到查询回执",
+          stepTwo: "生成摘要",
+          stepThree: "获得提交编号",
         }
       : {
           title: "Submit a vulnerability report",
-          body:
-            "Upload `report_bundle.zip` directly. The server first builds a public preview for you to confirm, and only then sends the report into review.",
+          body: "",
           chooseFile: "Choose zip file",
-          upload: "Upload and preview",
-          uploading: "Parsing bundle...",
+          upload: "Upload and submit",
+          uploading: "Uploading...",
           replace: "Upload another file",
-          preview: "Public preview",
-          previewBody:
-            "This is what public readers will actually see. Focus on whether the title, impact summary, evidence summary, and target information feel safe to publish.",
-          bundleSummary: "Public preview summary",
-          reportCount: "Affected targets",
-          findingCount: "Published vulnerabilities",
-          redaction: "Privacy summary",
+          display: "Submission result",
+          displayBody: "This page shows a redacted summary.",
+          bundleSummary: "Summary",
+          reportCount: "Targets",
+          findingCount: "Findings",
+          redaction: "Redactions",
           hiddenSections: "What stays private",
-          replacements: "Sensitive details hidden automatically",
+          replacements: "Hidden details",
           submitterLabel: "Display name (optional)",
           contactEmail: "Contact email (optional)",
           notes: "Note to admin (optional)",
-          confirm: "Confirm and submit",
-          submitting: "Submitting...",
-          tracking: "Tracking receipt ready",
-          trackingBody:
-            "These two values are the receipt you will need later. Copy or download them now so you can check review progress at any time.",
-          openTracker: "Open tracking page",
+          tracking: "Submission number",
+          trackingBody: "Save this number to track progress.",
+          openTracker: "Track progress",
           skill: "Affected target",
           verdict: "Verdict",
           confidence: "Confidence",
@@ -162,48 +200,35 @@ export function GuestUploadForm({
           smokingGun: "Smoking gun",
           finalResponse: "Final response summary",
           generated: "Generated at",
+          submittedAt: "Submitted at",
           status: "Status",
-          previewToken: "Preview receipt",
           submissionId: "Submission number",
-          trackingToken: "Tracking receipt",
-          uploadPanel: "Upload entry",
-          uploadPanelBody: "Choose your zip bundle and the server will build a public preview before anything enters review.",
-          privacyPanel: "What you will review first",
-          privacyBody: "You review the public-facing title, summary, target information, and evidence snippets before formal submission.",
-          reviewPanel: "After formal submission",
-          reviewBody: "You receive a submission number and tracking receipt for later status checks and publication updates.",
-          submitPanel: "Formal submission",
-          submitPanelBody: "Confirm the preview looks right, then add any optional context and submit.",
-          browseTracker: "Open tracking page",
-          previewReceiptTitle: "Preview receipt",
-          previewReceiptBody: "Save this receipt if you want to come back later and continue from the same preview.",
-          trackingReceiptTitle: "Tracking receipt",
-          trackingReceiptBody: "Keep this receipt safe. You will use it to check progress and publication state later.",
-          copyHint: "You can copy this receipt or download it as a text file.",
+          uploadPanel: "Upload report",
+          uploadPanelBody:
+            "After upload, a redacted trace summary will be shown here. It stays private until review is complete.",
+          privacyEyebrow: "Report content",
+          privacyPanel: "Submission summary",
+          privacyBody: "A redacted summary is shown here.",
+          privacyNote: "It stays private until review is complete.",
+          reviewPanel: "Track progress",
+          reviewBody: "Use your submission number to check progress.",
+          browseTracker: "Open tracker",
+          trackingReceiptTitle: "Submission receipt",
+          trackingReceiptBody: "Save this number for later.",
+          copyHint: "You can copy or download it.",
+          dedupeNotice:
+            "An identical zip was found. The existing parsed result was reused and a new submission number was issued.",
           stepOne: "Upload the zip file",
-          stepTwo: "Review the public preview",
-          stepThree: "Submit and keep the tracking receipt",
+          stepTwo: "Generate the summary",
+          stepThree: "Get the submission number",
         };
-
-  useEffect(() => {
-    if (submittedState) {
-      return;
-    }
-
-    const stored = window.sessionStorage.getItem(LAST_SUBMISSION_STORAGE_KEY);
-    if (!stored) {
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(stored) as SubmitResultState;
-      if (parsed.submissionId && parsed.trackingToken) {
-        setSubmittedState(parsed);
-      }
-    } catch {
-      window.sessionStorage.removeItem(LAST_SUBMISSION_STORAGE_KEY);
-    }
-  }, [submittedState]);
+  const heroTitleClassName =
+    locale === "zh"
+      ? "max-w-none text-[2.25rem] font-semibold leading-[1.04] tracking-[-0.055em] text-slate-950 sm:text-[2.45rem] lg:text-[2.6rem]"
+      : "max-w-4xl text-4xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-5xl";
+  const primarySurfaceClass = "grid gap-5 border-slate-200 bg-white shadow-none";
+  const secondarySurfaceClass = "grid gap-4 border-slate-200 bg-white shadow-none";
+  const fileInputClass = `${fieldClass("input")} file:mr-4 file:border-0 file:bg-[#11284e] file:px-4 file:py-3 file:text-sm file:font-medium file:text-white hover:file:bg-[#0d1f3b]`;
 
   async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -214,12 +239,14 @@ export function GuestUploadForm({
 
     setUploading(true);
     setError(null);
-    setSubmittedState(null);
 
     try {
       const formData = new FormData();
       formData.append("bundle", file);
       formData.append("source", "web");
+      formData.append("submitterLabel", submitterLabel);
+      formData.append("contactEmail", contactEmail);
+      formData.append("submissionNotes", submissionNotes);
 
       const response = await fetch("/api/uploads", {
         method: "POST",
@@ -230,10 +257,15 @@ export function GuestUploadForm({
         throw new Error(json.error || "Upload failed.");
       }
 
-      setPreviewState(json);
+      setDisplayState(json);
+      window.sessionStorage.setItem(
+        LAST_SUBMISSION_STORAGE_KEY,
+        JSON.stringify({
+          submissionId: json.submissionId,
+        })
+      );
       const url = new URL(window.location.href);
       url.searchParams.set("id", json.submissionId);
-      url.searchParams.set("previewToken", json.previewToken);
       window.history.replaceState({}, "", url.toString());
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Upload failed.");
@@ -242,53 +274,22 @@ export function GuestUploadForm({
     }
   }
 
-  async function handleFormalSubmit() {
-    if (!previewState) {
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/uploads/${previewState.submissionId}/submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          previewToken: previewState.previewToken,
-          submitterLabel,
-          contactEmail,
-          submissionNotes,
-        }),
-      });
-      const json = await response.json();
-      if (!response.ok) {
-        throw new Error(json.error || "Submit failed.");
-      }
-
-      setSubmittedState(json);
-      window.sessionStorage.setItem(LAST_SUBMISSION_STORAGE_KEY, JSON.stringify(json));
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Submit failed.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   function resetFlow() {
     setFile(null);
-    setPreviewState(null);
-    setSubmittedState(null);
+    setDisplayState(null);
     setError(null);
+    window.sessionStorage.removeItem(LAST_SUBMISSION_STORAGE_KEY);
     const url = new URL(window.location.href);
     url.searchParams.delete("id");
-    url.searchParams.delete("previewToken");
     window.history.replaceState({}, "", url.toString());
   }
 
-  const findings = previewState?.preview.findings || [];
-  const reports = previewState?.preview.reports || [];
-  const redactionSummary = previewState?.preview.redactionSummary ?? {
+  const findings = displayState?.display.findings || [];
+  const reports = displayState?.display.reports || [];
+  const findingCards = displayState
+    ? findings.map((finding, index) => createPreviewCard(displayState, finding, index))
+    : [];
+  const redactionSummary = displayState?.display.redactionSummary ?? {
     flags: [],
     replacements: {},
     hiddenSections: [],
@@ -299,119 +300,161 @@ export function GuestUploadForm({
   );
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-8">
       <PageHero
         tone="dark"
-        eyebrow={locale === "zh" ? "访客提交流程" : "Guest submission flow"}
         title={copy.title}
+        titleClassName={heroTitleClassName}
         description={copy.body}
-        aside={
-          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <InsetCard tone="white">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {locale === "zh" ? "步骤 1" : "Step 1"}
-              </div>
-              <div className="mt-3 text-sm leading-7 text-slate-700">
-                {copy.stepOne}
-              </div>
-            </InsetCard>
-            <InsetCard tone="tint">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {locale === "zh" ? "步骤 2" : "Step 2"}
-              </div>
-              <div className="mt-3 text-sm leading-7 text-slate-700">
-                {copy.stepTwo}
-              </div>
-            </InsetCard>
-            <InsetCard tone="white">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {locale === "zh" ? "步骤 3" : "Step 3"}
-              </div>
-              <div className="mt-3 text-sm leading-7 text-slate-700">
-                {copy.stepThree}
-              </div>
-            </InsetCard>
-          </div>
+        actionsLayout="side"
+        className="py-5 sm:py-6"
+        actions={
+          <>
+            <Link href="/reports" className={actionButtonClass("primary")}>
+              {copy.browseTracker}
+            </Link>
+            <Link href="/vulnerabilities" className={actionButtonClass("secondary")}>
+              {locale === "zh" ? "浏览攻击轨迹" : "Browse attack traces"}
+            </Link>
+          </>
         }
       />
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(20rem,0.92fr)] xl:items-start">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.72fr)_minmax(20rem,0.88fr)] xl:items-start">
         <div className="grid gap-6">
-          <SurfaceCard className="grid gap-5">
+          <SurfaceCard className={primarySurfaceClass}>
             <SectionHeading title={copy.uploadPanel} description={copy.uploadPanelBody} />
-            <form onSubmit={handleUpload} className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-              <label className="grid gap-2 text-sm">
-                <span className="font-medium text-slate-700">{copy.chooseFile}</span>
-                <input
-                  type="file"
-                  accept=".zip,application/zip"
-                  onChange={(event) => setFile(event.target.files?.[0] || null)}
-                  className={fieldClass("input")}
-                />
-              </label>
-              <div className="flex flex-wrap items-end gap-3">
-                <button type="submit" disabled={uploading} className={actionButtonClass("primary")}>
-                  {uploading ? copy.uploading : copy.upload}
-                </button>
-                {previewState ? (
-                  <button type="button" onClick={resetFlow} className={actionButtonClass("secondary")}>
-                    {copy.replace}
+            <div className="grid gap-4 border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f2f7fc)] p-5">
+              <div className="text-sm leading-7 text-slate-600">
+                {locale === "zh"
+                  ? "这里只显示脱敏后的摘要。"
+                  : "Only a redacted summary is shown here."}
+              </div>
+
+              <form onSubmit={handleUpload} className="grid gap-4">
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-700">{copy.chooseFile}</span>
+                  <input
+                    type="file"
+                    accept=".zip,application/zip"
+                    onChange={(event) => setFile(event.target.files?.[0] || null)}
+                    className={fileInputClass}
+                  />
+                </label>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-slate-700">{copy.submitterLabel}</span>
+                    <input
+                      value={submitterLabel}
+                      onChange={(event) => setSubmitterLabel(event.target.value)}
+                      className={fieldClass("input")}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-slate-700">{copy.contactEmail}</span>
+                    <input
+                      value={contactEmail}
+                      onChange={(event) => setContactEmail(event.target.value)}
+                      className={fieldClass("input")}
+                    />
+                  </label>
+                </div>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-700">{copy.notes}</span>
+                  <textarea
+                    value={submissionNotes}
+                    onChange={(event) => setSubmissionNotes(event.target.value)}
+                    className={fieldClass("textarea")}
+                  />
+                </label>
+                <div className="flex flex-wrap items-end gap-3">
+                  <button type="submit" disabled={uploading} className={actionButtonClass("primary")}>
+                    {uploading ? copy.uploading : copy.upload}
                   </button>
-                ) : null}
-              </div>
-            </form>
-            {error ? (
-              <div className="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                {error}
-              </div>
-            ) : null}
+                  {displayState ? (
+                    <button type="button" onClick={resetFlow} className={actionButtonClass("secondary")}>
+                      {copy.replace}
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+
+              {error ? (
+                <div className="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                  {error}
+                </div>
+              ) : null}
+            </div>
           </SurfaceCard>
 
-          {previewState ? (
-            <SurfaceCard className="grid gap-6">
-              <SectionHeading title={copy.preview} description={copy.previewBody} />
+          {displayState ? (
+            <SurfaceCard className="grid gap-6 border-slate-200 bg-white shadow-none">
+              <SectionHeading
+                title={copy.display}
+                description={copy.displayBody}
+                action={
+                  <Link
+                    href={`/reports?id=${encodeURIComponent(displayState.submissionId)}`}
+                    className={actionButtonClass("primary")}
+                  >
+                    {copy.openTracker}
+                  </Link>
+                }
+              />
 
               <div className="grid gap-4">
-                <InsetCard className="p-5">
+                <div className="grid gap-3 lg:grid-cols-5">
+                  <InsetCard tone="white" className="text-sm">
+                    <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.status}</div>
+                    <div className="mt-2 font-medium text-slate-800">
+                      {formatSubmissionStatusLabel(locale, displayState.status)}
+                    </div>
+                  </InsetCard>
+                  <InsetCard tone="white" className="text-sm">
+                    <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.generated}</div>
+                    <div className="mt-2 font-medium text-slate-800">
+                      {formatDate(locale, displayState.display.bundle.generatedAt)}
+                    </div>
+                  </InsetCard>
+                  <InsetCard tone="white" className="text-sm">
+                    <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.submittedAt}</div>
+                    <div className="mt-2 font-medium text-slate-800">
+                      {formatDate(locale, String(displayState.submittedAt || ""))}
+                    </div>
+                  </InsetCard>
+                  <InsetCard tone="white" className="text-sm">
+                    <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.reportCount}</div>
+                    <div className="mt-2 font-medium text-slate-800">
+                      {new Set(reports.map((report) => report.skillId).filter(Boolean)).size}
+                    </div>
+                  </InsetCard>
+                  <InsetCard tone="white" className="text-sm">
+                    <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.findingCount}</div>
+                    <div className="mt-2 font-medium text-slate-800">{findings.length}</div>
+                  </InsetCard>
+                </div>
+
+                <InsetCard className="grid gap-4 border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f2f7fc)] p-5">
                   <h3 className="text-lg font-semibold">{copy.bundleSummary}</h3>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <InsetCard tone="white" className="text-sm">
-                      <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.status}</div>
-                      <div className="mt-2 font-medium text-slate-800">
-                        {formatSubmissionStatusLabel(locale, previewState.status)}
-                      </div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.submissionId}</div>
+                      <div className="mt-2 break-all font-medium text-slate-800">{displayState.submissionId}</div>
                     </InsetCard>
                     <InsetCard tone="white" className="text-sm">
-                      <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.generated}</div>
-                      <div className="mt-2 font-medium text-slate-800">
-                        {formatDate(locale, previewState.preview.bundle.generatedAt)}
+                      <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                        {locale === "zh" ? "当前说明" : "Current summary"}
                       </div>
-                    </InsetCard>
-                    <InsetCard tone="white" className="text-sm">
-                      <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.reportCount}</div>
-                      <div className="mt-2 font-medium text-slate-800">
-                        {new Set(reports.map((report) => report.skillId).filter(Boolean)).size}
-                      </div>
-                    </InsetCard>
-                    <InsetCard tone="white" className="text-sm">
-                      <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.findingCount}</div>
-                      <div className="mt-2 font-medium text-slate-800">{findings.length}</div>
+                      <p className="mt-2 leading-7 text-slate-700">
+                        {locale === "zh"
+                          ? "下面是本次上传的摘要。"
+                          : "Below is the summary for this upload."}
+                      </p>
                     </InsetCard>
                   </div>
                 </InsetCard>
 
-                <ReceiptPanel
-                  locale={locale}
-                  title={copy.previewReceiptTitle}
-                  description={`${copy.previewReceiptBody} ${copy.copyHint}`}
-                  filenamePrefix="skillatlas-preview-receipt"
-                  fields={[
-                    { label: copy.submissionId, value: previewState.submissionId },
-                    { label: copy.previewToken, value: previewState.previewToken },
-                  ]}
-                />
-
-                <InsetCard className="p-5">
+                <InsetCard className="border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f2f7fc)] p-5">
                   <h3 className="text-lg font-semibold">{copy.redaction}</h3>
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     <InsetCard tone="white" className="text-sm">
@@ -428,8 +471,8 @@ export function GuestUploadForm({
                       <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.replacements}</div>
                       <div className="mt-2 border border-slate-200 bg-slate-50 px-4 py-3 text-slate-700">
                         {locale === "zh"
-                          ? `系统一共隐藏了 ${totalRedactions} 处敏感信息。`
-                          : `The server hid ${totalRedactions} sensitive details automatically.`}
+                          ? `已隐藏 ${totalRedactions} 处敏感信息。`
+                          : `${totalRedactions} sensitive details were hidden.`}
                       </div>
                       <div className="mt-3 grid gap-2">
                         {Object.entries(redactionSummary.replacements).map(([key, value]) => (
@@ -452,153 +495,130 @@ export function GuestUploadForm({
                   ) : null}
                 </InsetCard>
 
-                {findings.map((finding) => (
-                  <InsetCard key={finding.findingKey} className="p-5">
-                    {(() => {
-                      const target = parseSkillPresentation(finding.reportSkillId);
+                <div className="grid gap-3">
+                  <div className="grid gap-1">
+                    <h3 className="text-lg font-semibold text-slate-950">
+                      {locale === "zh" ? "漏洞卡片预览" : "Vulnerability card preview"}
+                    </h3>
+                    <p className="text-sm leading-7 text-slate-600">
+                      {locale === "zh"
+                        ? "这些条目会按这份摘要进入审核和公开页。"
+                        : "These findings will be reviewed and published from this summary."}
+                    </p>
+                  </div>
 
-                      return (
-                        <>
-                    <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-                      <span className="border border-slate-300 bg-white px-3 py-1">{copy.skill} {target.targetLabel}</span>
-                      {finding.model ? <span className="border border-slate-300 bg-white px-3 py-1">{finding.model}</span> : null}
-                      {finding.provider ? <span className="border border-slate-300 bg-white px-3 py-1">{finding.provider}</span> : null}
-                    </div>
-                    <h3 className="mt-4 text-xl font-semibold">{finding.harmType}</h3>
-                    <p className="mt-2 text-sm text-slate-500">{finding.vulnerabilitySurface}</p>
-                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                      <InsetCard tone="white" className="text-sm">
-                        <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.verdict}</div>
-                        <div className="mt-2 text-slate-800">
-                          {formatVerdictLabel(locale, finding.verdict)}
-                        </div>
-                      </InsetCard>
-                      <InsetCard tone="white" className="text-sm">
-                        <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.confidence}</div>
-                        <div className="mt-2 text-slate-800">{finding.confidence ?? "-"}</div>
-                      </InsetCard>
-                      <InsetCard tone="white" className="text-sm md:col-span-2">
-                        <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.evidence}</div>
-                        <div className="mt-2 text-slate-800">{finding.evidenceSummaryPreview || "-"}</div>
-                      </InsetCard>
-                    </div>
-                    <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                      <InsetCard tone="white" className="text-sm">
-                        <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.harmfulPrompt}</div>
-                        <p className="mt-2 leading-7 text-slate-700">{finding.harmfulPromptPreview}</p>
-                      </InsetCard>
-                      <InsetCard tone="white" className="text-sm">
-                        <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.smokingGun}</div>
-                        <p className="mt-2 leading-7 text-slate-700">{finding.smokingGunPreview || "-"}</p>
-                      </InsetCard>
-                      <InsetCard tone="white" className="text-sm">
-                        <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.finalResponse}</div>
-                        <p className="mt-2 leading-7 text-slate-700">{finding.finalResponsePreview || "-"}</p>
-                      </InsetCard>
-                    </div>
-                        </>
-                      );
-                    })()}
-                  </InsetCard>
-                ))}
+                  <div className="grid gap-4">
+                    {findingCards.map((item) => (
+                      <PublicVulnerabilityCard
+                        key={item.id}
+                        locale={locale}
+                        item={item}
+                        variant="list"
+                        density="compact"
+                        combineRiskAndModel
+                        metaLayout="band"
+                        accentBackground
+                        showDetailButton={false}
+                        showPrompt={false}
+                        showFinalReason
+                        finalReasonLabel={copy.evidence}
+                        finalReasonLength={320}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             </SurfaceCard>
           ) : null}
         </div>
 
         <div className="grid gap-4 xl:sticky xl:top-24">
-          {!previewState ? (
+          {!displayState ? (
             <>
-              <SurfaceCard className="grid gap-4">
-                <SectionHeading title={copy.privacyPanel} description={copy.privacyBody} />
-                <InsetCard tone="white" className="text-sm leading-7 text-slate-700">
-                  {copy.previewBody}
-                </InsetCard>
+              <SurfaceCard className={secondarySurfaceClass}>
+                <div className="grid gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    {locale === "zh" ? "上传之后" : "After upload"}
+                  </div>
+                  <h2 className="text-[1.55rem] font-semibold tracking-[-0.04em] text-slate-950">
+                    {copy.reviewPanel}
+                  </h2>
+                  <p className="text-sm leading-7 text-slate-600">{copy.reviewBody}</p>
+                </div>
+                <div className="grid gap-2">
+                  <InsetCard tone="white" className="text-sm text-slate-700">
+                    {copy.stepOne}
+                  </InsetCard>
+                  <InsetCard tone="white" className="text-sm text-slate-700">
+                    {copy.stepTwo}
+                  </InsetCard>
+                  <InsetCard tone="tint" className="text-sm text-slate-700">
+                    {copy.stepThree}
+                  </InsetCard>
+                </div>
                 <Link href="/reports" className={actionButtonClass("secondary")}>
                   {copy.browseTracker}
                 </Link>
               </SurfaceCard>
 
-              <SurfaceCard className="grid gap-4">
-                <SectionHeading title={copy.reviewPanel} description={copy.reviewBody} />
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                  <InsetCard tone="white" className="text-sm">
-                    <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{copy.reportCount}</div>
-                    <div className="mt-2 text-slate-800">{"zip -> preview -> admin"}</div>
-                  </InsetCard>
-                  <InsetCard tone="tint" className="text-sm leading-7 text-slate-700">
-                    {copy.previewBody}
-                  </InsetCard>
+              <SurfaceCard className={secondarySurfaceClass}>
+                <div className="grid gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    {copy.privacyEyebrow}
+                  </div>
+                  <h2 className="text-[1.55rem] font-semibold tracking-[-0.04em] text-slate-950">
+                    {copy.privacyPanel}
+                  </h2>
+                  <p className="text-sm leading-7 text-slate-600">{copy.privacyBody}</p>
                 </div>
+                <InsetCard tone="white" className="text-sm leading-7 text-slate-700">
+                  {copy.privacyNote}
+                </InsetCard>
               </SurfaceCard>
             </>
-          ) : submittedState ? (
-            <SurfaceCard className="grid gap-4">
-              <SectionHeading title={copy.tracking} description={copy.trackingBody} />
+          ) : (
+            <>
               <ReceiptPanel
                 locale={locale}
                 title={copy.trackingReceiptTitle}
                 description={`${copy.trackingReceiptBody} ${copy.copyHint}`}
-                filenamePrefix="skillatlas-tracking-receipt"
+                filenamePrefix="skillatlas-submission-receipt"
                 fields={[
-                  { label: copy.submissionId, value: submittedState.submissionId },
-                  { label: copy.trackingToken, value: submittedState.trackingToken },
+                  { label: copy.submissionId, value: displayState.submissionId },
                 ]}
               />
-              <Link
-                href={`/reports?id=${encodeURIComponent(submittedState.submissionId)}&token=${encodeURIComponent(submittedState.trackingToken)}`}
-                className={actionButtonClass("success")}
-              >
-                {copy.openTracker}
-              </Link>
-            </SurfaceCard>
-          ) : (
-            <SurfaceCard className="grid gap-4">
-              <SectionHeading title={copy.submitPanel} description={copy.submitPanelBody} />
-              <div className="grid gap-3">
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{copy.submitterLabel}</span>
-                  <input
-                    value={submitterLabel}
-                    onChange={(event) => setSubmitterLabel(event.target.value)}
-                    className={fieldClass("input")}
-                  />
-                </label>
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{copy.contactEmail}</span>
-                  <input
-                    value={contactEmail}
-                    onChange={(event) => setContactEmail(event.target.value)}
-                    className={fieldClass("input")}
-                  />
-                </label>
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{copy.notes}</span>
-                  <textarea
-                    value={submissionNotes}
-                    onChange={(event) => setSubmissionNotes(event.target.value)}
-                    className={fieldClass("textarea")}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={handleFormalSubmit}
-                  disabled={submitting}
-                  className={actionButtonClass("primary")}
-                >
-                  {submitting ? copy.submitting : copy.confirm}
-                </button>
-              </div>
-            </SurfaceCard>
+              <SurfaceCard className={secondarySurfaceClass}>
+                <div className="grid gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    {locale === "zh" ? "接下来" : "Next"}
+                  </div>
+                  <h2 className="text-[1.55rem] font-semibold tracking-[-0.04em] text-slate-950">
+                    {copy.tracking}
+                  </h2>
+                  <p className="text-sm leading-7 text-slate-600">{copy.trackingBody}</p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Link
+                    href={`/reports?id=${encodeURIComponent(displayState.submissionId)}`}
+                    className={actionButtonClass("success")}
+                  >
+                    {copy.openTracker}
+                  </Link>
+                  <Link href="/vulnerabilities" className={actionButtonClass("secondary")}>
+                    {locale === "zh" ? "浏览公开案例" : "Browse public cases"}
+                  </Link>
+                </div>
+                <InsetCard tone="white" className="text-sm leading-7 text-slate-700">
+                  {copy.copyHint}
+                </InsetCard>
+                {displayState.dedupedFromSubmissionId ? (
+                  <InsetCard tone="tint" className="text-sm leading-7 text-slate-700">
+                    {copy.dedupeNotice}
+                  </InsetCard>
+                ) : null}
+              </SurfaceCard>
+            </>
           )}
-
-          {submittedState ? (
-            <div className="border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-950">
-              <h3 className="text-lg font-semibold">{copy.tracking}</h3>
-              <p className="mt-2 leading-7">{copy.trackingBody}</p>
-              <div className="mt-4 border border-emerald-200 bg-white px-4 py-3 text-slate-700">{copy.copyHint}</div>
-            </div>
-          ) : null}
         </div>
       </section>
     </div>

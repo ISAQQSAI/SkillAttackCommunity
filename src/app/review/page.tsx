@@ -49,8 +49,8 @@ export default async function ReviewPage({
         title={locale === "zh" ? "管理员审核队列" : "Admin review queue"}
         description={
           locale === "zh"
-            ? "查看所有正式提交，下载原始 bundle，检查脱敏结果，并决定是否发布为公开案例。"
-            : "Review formal submissions, download original bundles, inspect the sanitized findings, and decide whether to publish them as public cases."
+            ? "查看所有正式提交，下载原始 bundle，检查脱敏结果，并决定拒绝，或审核通过后直接公开。"
+            : "Review submitted bundles, download raw archives, inspect the sanitized findings, and either reject them or publish them immediately."
         }
         aside={
           <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">

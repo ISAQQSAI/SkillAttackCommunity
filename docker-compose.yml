@@ -22,9 +22,16 @@ services:
       dockerfile: Dockerfile
     image: skillattack-community:latest
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     env_file:
       - .env.production
-    command: ["sh", "-lc", "npx prisma migrate deploy && npm run start -- --hostname 0.0.0.0"]
+    command:
+      [
+        "sh",
+        "-lc",
+        "npx prisma migrate deploy || npx prisma db push; npm run start -- --hostname 0.0.0.0",
+      ]
     volumes:
       - sac_var:/app/var
     depends_on:

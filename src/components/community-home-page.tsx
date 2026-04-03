@@ -9,14 +9,21 @@ import {
   SurfaceCard,
 } from "@/components/page-chrome";
 import { HomeActionRail } from "@/components/home-action-rail";
+import { getPublicFindingPath } from "@/lib/public-case-routing";
 import {
-  findPublicRiskCategoryByRiskType,
   getPublicRiskCategory,
   getPublicRiskCategoryLabel,
-  PUBLIC_RISK_CATEGORIES,
 } from "@/lib/public-risk-categories";
 import { getLocale } from "@/lib/server/locale";
-import { getPublicVulnerabilityLibrarySummary, listPublicVulnerabilities } from "@/lib/server/public-skills";
+import {
+  buildPublicCaseFilterState,
+  buildPublicCaseVulnerabilitySummary,
+  createPublicCaseVulnerabilityItems,
+  normalizePublicCaseLevelFilter,
+  normalizePublicCaseResultFilter,
+  sortPublicCaseVulnerabilitiesBySurfaceOrdinal,
+} from "@/lib/server/public-case-vulnerabilities";
+import { listPublicCases } from "@/lib/server/report-submissions";
 
 function homeButtonClass(tone: "primary" | "secondary" = "primary") {
   if (tone === "secondary") {
@@ -34,45 +41,6 @@ function formatNumber(locale: string, value: number) {
   return new Intl.NumberFormat(locale === "zh" ? "zh-CN" : "en-US").format(value);
 }
 
-function levelRank(level: string) {
-  const normalized = level.toLowerCase();
-
-  if (normalized.includes("critical") || normalized.includes("high") || normalized.includes("高")) {
-    return 0;
-  }
-
-  if (normalized.includes("medium") || normalized.includes("中")) {
-    return 1;
-  }
-
-  if (normalized.includes("low") || normalized.includes("低")) {
-    return 2;
-  }
-
-  return 3;
-}
-
-function sortLevelOptions(levels: string[]) {
-  return [...new Set(levels.filter(Boolean))].sort((left, right) => {
-    return levelRank(left) - levelRank(right) || left.localeCompare(right);
-  });
-}
-
-function sortBySurfaceOrdinal<T extends { surfaceOrdinal: string | null; surfaceId: string; agentModel?: string }>(items: T[]) {
-  return [...items].sort((left, right) => {
-    const leftNumber = Number.parseInt(left.surfaceOrdinal || "", 10);
-    const rightNumber = Number.parseInt(right.surfaceOrdinal || "", 10);
-    const normalizedLeft = Number.isFinite(leftNumber) ? leftNumber : Number.MAX_SAFE_INTEGER;
-    const normalizedRight = Number.isFinite(rightNumber) ? rightNumber : Number.MAX_SAFE_INTEGER;
-
-    return (
-      normalizedLeft - normalizedRight ||
-      left.surfaceId.localeCompare(right.surfaceId) ||
-      (left.agentModel || "").localeCompare(right.agentModel || "")
-    );
-  });
-}
-
 export async function CommunityHomePage({
   risk,
   result,
@@ -84,39 +52,21 @@ export async function CommunityHomePage({
 }) {
   const locale = await getLocale();
   const selectedRisk = getPublicRiskCategory(risk)?.slug;
-  const selectedResult = result;
-  const selectedLevel = level;
-  const [filteredVulnerabilities, allVulnerabilities, summary] = await Promise.all([
-    listPublicVulnerabilities({ risk: selectedRisk, result: selectedResult, level: selectedLevel }),
-    listPublicVulnerabilities(),
-    getPublicVulnerabilityLibrarySummary(),
-  ]);
-  const vulnerabilities = sortBySurfaceOrdinal(filteredVulnerabilities).slice(0, 4);
-  const riskCounts = new Map(PUBLIC_RISK_CATEGORIES.map((category) => [category.slug, 0]));
-  const resultCounts = new Map([
-    ["success", 0],
-    ["technical", 0],
-    ["ignore", 0],
-  ]);
-  const levelCounts = new Map<string, number>();
-
-  for (const item of allVulnerabilities) {
-    if (resultCounts.has(item.result)) {
-      resultCounts.set(item.result, (resultCounts.get(item.result) ?? 0) + 1);
-    }
-    if (item.surfaceLevel) {
-      levelCounts.set(item.surfaceLevel, (levelCounts.get(item.surfaceLevel) ?? 0) + 1);
-    }
-
-    const category = findPublicRiskCategoryByRiskType(item.riskType);
-    if (!category) {
-      continue;
-    }
-
-    riskCounts.set(category.slug, (riskCounts.get(category.slug) ?? 0) + 1);
-  }
-
-  const levelOptions = sortLevelOptions(Array.from(levelCounts.keys()));
+  const publicCases = await listPublicCases();
+  const allVulnerabilities = createPublicCaseVulnerabilityItems(publicCases);
+  const selectedResult = normalizePublicCaseResultFilter(result);
+  const selectedLevel = normalizePublicCaseLevelFilter(
+    level,
+    allVulnerabilities.map((item) => item.surfaceLevel)
+  );
+  const filterState = buildPublicCaseFilterState(allVulnerabilities, {
+    risk: selectedRisk,
+    result: selectedResult,
+    level: selectedLevel,
+  });
+  const filteredVulnerabilities = filterState.filteredItems;
+  const summary = buildPublicCaseVulnerabilitySummary(allVulnerabilities);
+  const vulnerabilities = sortPublicCaseVulnerabilitiesBySurfaceOrdinal(filteredVulnerabilities).slice(0, 4);
   const activeRiskCategory = getPublicRiskCategory(selectedRisk);
   const hasActiveFilter = Boolean(selectedRisk || selectedResult || selectedLevel);
   const viewAllQuery = Object.fromEntries(
@@ -129,6 +79,10 @@ export async function CommunityHomePage({
   const viewAllHref = Object.keys(viewAllQuery).length
     ? { pathname: "/vulnerabilities", query: viewAllQuery }
     : "/vulnerabilities";
+  const heroTitleClassName =
+    locale === "zh"
+      ? "max-w-none text-[2.25rem] font-semibold leading-[1.04] tracking-[-0.055em] text-slate-950 sm:text-[2.45rem] lg:text-[2.6rem] xl:whitespace-nowrap"
+      : "max-w-4xl text-4xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-5xl";
 
   return (
     <div className="grid gap-8">
@@ -136,23 +90,29 @@ export async function CommunityHomePage({
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.95fr)] xl:items-start">
           <div className="grid gap-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-              {locale === "zh" ? "可直接使用的漏洞社区" : "A usable vulnerability community"}
+              {locale === "zh" ? "社区驱动的技能安全" : "Community-driven Skill Security"}
             </div>
             <div className="grid gap-4">
-              <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-5xl">
+              <h1 className={heroTitleClassName}>
                 {locale === "zh"
-                  ? "先看真实攻击面案例，再决定是否提交你的报告。"
-                  : "See real surface cases first, then decide whether to submit your own report."}
+                  ? "共同绘制每个智能体技能的攻击轨迹"
+                  : "Trace the attack path of every agent skill together."}
               </h1>
               <p className="max-w-3xl text-sm leading-7 text-slate-600">
                 {locale === "zh"
-                  ? "首页现在直接按 surface 粒度浏览公开案例，中间统计收成轨迹数、skill 数和模型数，下面这组卡片支持按 8 类风险筛选结果。"
-                  : "The home page now browses public cases at the surface level, reduces the center stats to trajectories, skills, and models, and lets you filter the case list through eight fixed risk categories."}
+                  ? (
+                    <>
+                      由社区贡献的攻击轨迹库。按攻击结果、风险等级和风险类型浏览；
+                      <br />
+                      提交你的发现，帮助更多人防范智能体风险。
+                    </>
+                  )
+                  : "A community-contributed attack trace library. Browse by attack outcome, risk level, and risk type. Submit your findings to help others defend against agent risks."}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Link href="/vulnerabilities" className={homeButtonClass("primary")}>
-                {locale === "zh" ? "浏览攻击面案例" : "Browse surface cases"}
+                {locale === "zh" ? "浏览攻击轨迹" : "Browse attack traces"}
               </Link>
               <Link href="/submit" className={homeButtonClass("secondary")}>
                 {locale === "zh" ? "上传漏洞报告" : "Submit a report"}
@@ -164,9 +124,9 @@ export async function CommunityHomePage({
             <PageStat
               layout="row"
               className="border-0"
-              label={locale === "zh" ? "轨迹" : "Trajectories"}
+              label={locale === "zh" ? "攻击轨迹" : "Attack Traces"}
               value={formatNumber(locale, summary.surfaceCount)}
-              hint={locale === "zh" ? "按公开轨迹条目统计" : "counted as public trajectory entries"}
+              hint={locale === "zh" ? "按公开攻击轨迹条目统计" : "counted as public attack trace entries"}
             />
             <PageStat
               layout="row"
@@ -180,7 +140,7 @@ export async function CommunityHomePage({
               className="border-0"
               label={locale === "zh" ? "模型数" : "Models"}
               value={formatNumber(locale, summary.modelCount)}
-              hint={locale === "zh" ? "来自 round 运行记录" : "parsed from round execution records"}
+              hint={locale === "zh" ? "已覆盖的模型" : "Covered models"}
             />
           </div>
         </div>
@@ -189,15 +149,13 @@ export async function CommunityHomePage({
       <section className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] xl:items-start">
         <SurfaceCard className="grid gap-5 rounded-none border-slate-200 bg-white shadow-none hover:shadow-none">
           <SectionHeading
-            title={locale === "zh" ? "最新轨迹" : "Latest trajectories"}
+            title={locale === "zh" ? "最新攻击轨迹" : "Latest attack traces"}
             description={
-              locale === "zh"
-                ? activeRiskCategory
+              activeRiskCategory
+                ? locale === "zh"
                   ? `当前按「${getPublicRiskCategoryLabel(activeRiskCategory, locale)}」筛选，只展示匹配这个风险分类的 surface。`
-                  : "下面支持按 8 类风险筛选结果；卡片保留当前首页结构，并按 No. 顺序展示公开轨迹。"
-                : activeRiskCategory
-                  ? `Currently filtered by “${getPublicRiskCategoryLabel(activeRiskCategory, locale)}”, showing only the surfaces that match this risk category.`
-                : "Use the eight fixed risk categories below while keeping the current home-card structure and ordering the public trajectories by No."
+                  : `Currently filtered by “${getPublicRiskCategoryLabel(activeRiskCategory, locale)}”, showing only the surfaces that match this risk category.`
+                : undefined
             }
           />
           <div className="grid gap-5 xl:grid-cols-[15rem_minmax(0,1fr)] xl:items-start">
@@ -207,11 +165,14 @@ export async function CommunityHomePage({
               selectedRisk={selectedRisk}
               selectedResult={selectedResult}
               selectedLevel={selectedLevel}
-              totalCount={allVulnerabilities.length}
-              riskCounts={riskCounts}
-              resultCounts={resultCounts}
-              levelCounts={levelCounts}
-              levelOptions={levelOptions}
+              totalCount={filterState.totalCount}
+              allRiskCount={filterState.allRiskCount}
+              allResultCount={filterState.allResultCount}
+              allLevelCount={filterState.allLevelCount}
+              riskCounts={filterState.riskCounts}
+              resultCounts={filterState.resultCounts}
+              levelCounts={filterState.levelCounts}
+              levelOptions={filterState.levelOptions}
               layout="sidebar"
               preservedQuery={{
                 risk: selectedRisk,
@@ -225,6 +186,10 @@ export async function CommunityHomePage({
                   key={item.id}
                   locale={locale}
                   item={item}
+                  detailHref={getPublicFindingPath({
+                    slug: item.slug,
+                    findingKey: item.surfaceId,
+                  })}
                   variant="list"
                   density="compact"
                   promptLength={260}
@@ -251,15 +216,15 @@ export async function CommunityHomePage({
                         ? "可以切换结果、等级或风险分类，或者返回“全部”查看当前公开的攻击面案例。"
                         : "Try another result, level, or risk category, or switch back to “All” to browse the currently public surface cases."
                       : locale === "zh"
-                        ? "等当前公开数据集里出现可解析的 surface 数据后，这里会出现按 surface 粒度展示的卡片。"
-                        : "Surface-level cards will appear here once the current public dataset contains parseable surface runs."
+                        ? "等公开案例进入数据库后，这里会自动出现可浏览的首页卡片。"
+                        : "Cards will appear here automatically once published cases exist in the database."
                   }
                 />
               ) : null}
               {filteredVulnerabilities.length ? (
                 <div className="flex justify-center border-t border-slate-200 pt-3">
                   <Link href={viewAllHref} className={viewAllButtonClass()}>
-                    {locale === "zh" ? "查看全部轨迹" : "View all trajectories"}
+                    {locale === "zh" ? "查看全部轨迹" : "View all traces"}
                   </Link>
                 </div>
               ) : null}

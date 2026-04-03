@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { SurfaceCard } from "@/components/page-chrome";
 import type { Locale } from "@/lib/i18n";
+import { LAST_SUBMISSION_STORAGE_KEY } from "@/lib/submission-receipt";
 
 function squareButtonClass(tone: "primary" | "secondary" = "primary") {
   if (tone === "secondary") {
@@ -16,6 +17,10 @@ function squareButtonClass(tone: "primary" | "secondary" = "primary") {
 
 function squareFieldClass() {
   return "w-full border border-slate-300 bg-[#fbfdff] px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#244980] focus:bg-white file:mr-4 file:border-0 file:bg-[#11284e] file:px-4 file:py-3 file:text-sm file:font-medium file:text-white hover:file:bg-[#0d1f3b]";
+}
+
+function skillAttackLinkClass() {
+  return "group relative inline-flex items-center font-bold text-[#1d4f91] transition duration-200 ease-out hover:-translate-y-0.5 hover:text-[#11284e] focus-visible:-translate-y-0.5 focus-visible:text-[#11284e] focus-visible:outline-none";
 }
 
 export function HomeActionRail({
@@ -31,50 +36,53 @@ export function HomeActionRail({
     locale === "zh"
       ? {
           uploadEyebrow: "上传入口",
-          uploadTitle: "上传漏洞报告",
+          uploadTitle: "提交攻击轨迹",
           uploadBody:
-            "上传 zip 压缩包后，系统会先生成一份公开预览。你确认展示内容没有问题后，才会正式提交审核。",
+            "支持两种提交方式：通过命令行脚本自动上传，或在本页手动上传 zip 文件。",
           chooseFile: "选择 zip 文件",
-          upload: "上传并查看预览",
-          uploading: "解析中...",
-          uploadHint: "原始 zip、原始 JSON 和完整轨迹不会直接公开；公开页面只会使用审核后的安全摘要。",
-          openFullUpload: "进入完整上传页",
-          stepOne: "1 上传 zip 文件",
-          stepTwo: "2 检查可公开预览",
-          stepThree: "3 提交并保存查询回执",
+          upload: "提交",
+          uploading: "提交中...",
+          uploadHint:
+            '两种方式提交后都会获得一个提交编号，可在"查询提交"页面追踪处理状态。',
+          methodOneTitle: "方式 1 · 命令行上传",
+          methodOneLead: "运行 SkillAttack 实验后，使用上传脚本将结果直接推送到平台：",
+          methodOneCommand: "python scripts/upload_results.py <结果目录>",
+          methodTwoTitle: "方式 2 · 网页上传",
+          methodTwoBody: "在上方选择 zip 文件并点击提交。",
           trackerEyebrow: "状态查询",
           trackerTitle: "查询我的提交",
           trackerBody:
-            "输入提交编号和查询回执，查看当前进度、平台反馈，以及是否已经发布为公开页面。",
+            "输入提交编号，查看当前进度、平台反馈，以及是否已经发布为公开页面。",
           submissionId: "提交编号",
-          trackingToken: "查询回执",
           track: "查看进度",
           openTracker: "进入查询页",
-          trackerHint: "正式提交后，这两个值就是你的查询凭证。",
+          trackerHint: "上传成功后，提交编号会立即返回给你，后续查询只需要它。",
           chooseFirst: "请先选择 zip 文件。",
         }
       : {
           uploadEyebrow: "Upload entry",
-          uploadTitle: "Submit a vulnerability report",
+          uploadTitle: "Submit an attack trace",
           uploadBody:
-            "Upload your zip bundle and the server will build a public preview first. You review that preview before anything is formally submitted for review.",
+            "Two submission paths are supported: upload automatically from the command line, or upload a zip file manually on this page.",
           chooseFile: "Choose zip file",
-          upload: "Upload and preview",
-          uploading: "Parsing bundle...",
-          uploadHint: "Raw bundles, raw JSON, and full trajectories are never published directly. Public pages use reviewed summaries only.",
-          openFullUpload: "Open full upload page",
-          stepOne: "1 Upload the zip",
-          stepTwo: "2 Review the public preview",
-          stepThree: "3 Submit and save your receipt",
+          upload: "Submit",
+          uploading: "Submitting...",
+          uploadHint:
+            'Both submission paths return a submission number that you can track from the "Track Submission" page.',
+          methodOneTitle: "Option 1 · Command-line upload",
+          methodOneLead:
+            "After running SkillAttack, use the upload script to push results directly to the platform:",
+          methodOneCommand: "python scripts/upload_results.py <results_dir>",
+          methodTwoTitle: "Option 2 · Web upload",
+          methodTwoBody: "Choose a zip file above and click submit.",
           trackerEyebrow: "Status lookup",
           trackerTitle: "Track my submission",
           trackerBody:
-            "Enter your submission number and tracking receipt to see progress, platform feedback, and whether the report has been published.",
+            "Enter your submission number to see progress, platform feedback, and whether the report has been published.",
           submissionId: "Submission number",
-          trackingToken: "Tracking receipt",
           track: "Check status",
           openTracker: "Open tracking page",
-          trackerHint: "These two values become your lookup receipt after formal submission.",
+          trackerHint: "Your submission number is returned immediately after upload.",
           chooseFirst: "Choose a zip file first.",
         };
 
@@ -104,8 +112,15 @@ export function HomeActionRail({
         throw new Error(json.error || "Upload failed.");
       }
 
+      window.sessionStorage.setItem(
+        LAST_SUBMISSION_STORAGE_KEY,
+        JSON.stringify({
+          submissionId: json.submissionId,
+        })
+      );
+
       window.location.assign(
-        `/submit?id=${encodeURIComponent(json.submissionId)}&previewToken=${encodeURIComponent(json.previewToken)}`
+        `/submit?id=${encodeURIComponent(json.submissionId)}`
       );
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Upload failed.");
@@ -143,12 +158,60 @@ export function HomeActionRail({
         </form>
 
         <div className="grid gap-3 border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f2f7fc)] p-4 text-sm">
-          <p className="leading-7 text-slate-700">{copy.uploadHint}</p>
           <div className="grid gap-2">
-            <div className="border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{copy.stepOne}</div>
-            <div className="border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{copy.stepTwo}</div>
-            <div className="border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{copy.stepThree}</div>
+            <div className="border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                {copy.methodOneTitle}
+              </div>
+              <div className="mt-2 leading-7">
+                {locale === "zh" ? (
+                  <>
+                    运行{" "}
+                    <a
+                      href="https://github.com/ISAQQSAI/SkillAttack"
+                      target="_blank"
+                      rel="noreferrer"
+                      className={skillAttackLinkClass()}
+                    >
+                      <span className="relative z-10">SkillAttack</span>
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-0 bottom-[0.08em] h-[0.28em] origin-left scale-x-0 bg-[linear-gradient(90deg,rgba(59,130,246,0.18),rgba(29,78,216,0.34))] transition duration-300 ease-out group-hover:scale-x-100 group-focus-visible:scale-x-100"
+                      />
+                    </a>{" "}
+                    实验后，使用上传脚本将结果直接推送到平台：
+                  </>
+                ) : (
+                  <>
+                    After running{" "}
+                    <a
+                      href="https://github.com/ISAQQSAI/SkillAttack"
+                      target="_blank"
+                      rel="noreferrer"
+                      className={skillAttackLinkClass()}
+                    >
+                      <span className="relative z-10">SkillAttack</span>
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-0 bottom-[0.08em] h-[0.28em] origin-left scale-x-0 bg-[linear-gradient(90deg,rgba(59,130,246,0.18),rgba(29,78,216,0.34))] transition duration-300 ease-out group-hover:scale-x-100 group-focus-visible:scale-x-100"
+                      />
+                    </a>
+                    , use the upload script to push results directly to the platform:
+                  </>
+                )}
+              </div>
+              <div className="mt-3 border border-slate-200 bg-[#f7fafe] px-4 py-3 font-mono text-[13px] text-slate-900">
+                {copy.methodOneCommand}
+              </div>
+            </div>
+            <div className="border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                {copy.methodTwoTitle}
+              </div>
+              <div className="mt-2 leading-7">{copy.methodTwoBody}</div>
+            </div>
           </div>
+          <p className="leading-7 text-slate-700">{copy.uploadHint}</p>
         </div>
 
         {error ? (
@@ -156,10 +219,6 @@ export function HomeActionRail({
             {error}
           </div>
         ) : null}
-
-        <Link href="/submit" className={squareButtonClass("secondary")}>
-          {copy.openFullUpload}
-        </Link>
       </SurfaceCard>
 
       <SurfaceCard className="grid gap-5 rounded-none border-slate-200 hover:shadow-none">
@@ -177,11 +236,6 @@ export function HomeActionRail({
           <input
             name="id"
             placeholder={copy.submissionId}
-            className={squareFieldClass()}
-          />
-          <input
-            name="token"
-            placeholder={copy.trackingToken}
             className={squareFieldClass()}
           />
           <button type="submit" className={squareButtonClass("primary")}>

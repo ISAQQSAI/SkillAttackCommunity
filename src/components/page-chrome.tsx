@@ -7,17 +7,21 @@ function cx(...values: Array<string | false | null | undefined>) {
 export function PageHero({
   eyebrow,
   title,
+  titleClassName,
   description,
   actions,
   aside,
+  actionsLayout = "bottom",
   tone = "light",
   className,
 }: {
   eyebrow?: ReactNode;
   title: ReactNode;
+  titleClassName?: string;
   description?: ReactNode;
   actions?: ReactNode;
   aside?: ReactNode;
+  actionsLayout?: "bottom" | "side";
   tone?: "light" | "dark";
   className?: string;
 }) {
@@ -31,7 +35,11 @@ export function PageHero({
       <div
         className={cx(
           "grid gap-8",
-          aside ? "xl:grid-cols-[minmax(0,1.35fr)_minmax(19rem,0.9fr)] xl:items-end" : ""
+          aside
+            ? "xl:grid-cols-[minmax(0,1.35fr)_minmax(19rem,0.9fr)] xl:items-end"
+            : actions && actionsLayout === "side"
+              ? "xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end"
+              : ""
         )}
       >
         <div className="grid gap-5">
@@ -41,7 +49,12 @@ export function PageHero({
             </div>
           ) : null}
           <div className="grid gap-3">
-            <h1 className="max-w-5xl text-3xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-4xl">
+            <h1
+              className={cx(
+                "max-w-5xl text-3xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-4xl",
+                titleClassName
+              )}
+            >
               {title}
             </h1>
             {description ? (
@@ -50,8 +63,13 @@ export function PageHero({
               </div>
             ) : null}
           </div>
-          {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+          {actions && actionsLayout === "bottom" ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
         </div>
+        {actions && actionsLayout === "side" ? (
+          <div className="flex flex-wrap gap-3 xl:justify-end xl:self-end">
+            {actions}
+          </div>
+        ) : null}
         {aside ? <div className="relative">{aside}</div> : null}
       </div>
     </section>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { createUploadPreview } from "@/lib/server/report-submissions";
+import { createSubmittedUpload } from "@/lib/server/report-submissions";
 
 function pickFirstFile(formData: FormData) {
   const direct = formData.get("bundle");
@@ -27,11 +27,27 @@ export async function POST(request: Request) {
     }
 
     const source = String(formData.get("source") || "web") === "api" ? "api" : "web";
-    const result = await createUploadPreview(file, source);
+    const result = await createSubmittedUpload(file, source, {
+      submitterLabel: String(formData.get("submitterLabel") || ""),
+      contactEmail: String(formData.get("contactEmail") || ""),
+      submissionNotes: String(formData.get("submissionNotes") || ""),
+    });
+
+    if (source === "api") {
+      return NextResponse.json(
+        {
+          submissionId: result.submissionId,
+          status: result.status,
+          submittedAt: result.submittedAt,
+        },
+        { status: 201 }
+      );
+    }
+
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not create upload preview." },
+      { error: error instanceof Error ? error.message : "Could not process upload." },
       { status: 400 }
     );
   }

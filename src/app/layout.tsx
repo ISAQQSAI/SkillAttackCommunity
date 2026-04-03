@@ -15,16 +15,22 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "SkillAtlas",
-  description:
-    "Attack Trace Library for Agent Skills — Focusing on decision paths of unsafe behaviors executed by agents and public security cases",
-  icons: {
-    icon: "/skillatlas-logo-5-2-6.svg",
-    shortcut: "/skillatlas-logo-5-2-6.svg",
-    apple: "/skillatlas-logo-5-2-6.svg",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+
+  return {
+    title: locale === "zh" ? "SkillAtlas" : "SkillAtlas",
+    description:
+      locale === "zh"
+        ? "智能体技能攻击轨迹库——记录智能体不安全行为背后的攻击路径与公开披露的安全案例"
+        : "Attack Trace Library for Agent Skills — Documenting attack paths behind unsafe agent behaviors and publicly disclosed security cases",
+    icons: {
+      icon: "/skillatlas-logo-5-2-6.svg",
+      shortcut: "/skillatlas-logo-5-2-6.svg",
+      apple: "/skillatlas-logo-5-2-6.svg",
+    },
+  };
+}
 
 export default async function RootLayout({
   children,

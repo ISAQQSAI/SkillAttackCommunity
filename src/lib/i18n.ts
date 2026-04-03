@@ -15,17 +15,17 @@ const dictionaries = {
     shell: {
       brand: "SkillAtlas",
       tagline:
-        "Attack Trace Library for Agent Skills — Focusing on decision paths of unsafe behaviors executed by agents and public security cases",
+        "Attack Trace Library for Agent Skills — Documenting attack paths behind unsafe agent behaviors and publicly disclosed security cases",
       nav: {
         home: "Home",
-        skills: "Vulnerabilities",
+        skills: "Traces",
         showcase: "Showcase",
         findings: "Findings",
         leaderboards: "Leaderboards",
         datasets: "Datasets",
         models: "Models",
         submit: "Submit",
-        reports: "My Reports",
+        reports: "Track Submission",
         review: "Review",
       },
       chips: {
@@ -313,17 +313,17 @@ const dictionaries = {
   zh: {
     shell: {
       brand: "SkillAtlas",
-      tagline: "智能体风险路径库——聚焦智能体执行不安全行为的决策路径与公开安全案例",
+      tagline: "智能体技能攻击轨迹库——记录智能体不安全行为背后的攻击路径与公开披露的安全案例",
       nav: {
         home: "首页",
-        skills: "漏洞案例",
+        skills: "轨迹",
         showcase: "展示",
         findings: "案例",
         leaderboards: "排行榜",
         datasets: "数据集",
         models: "模型",
         submit: "提交",
-        reports: "我的报告",
+        reports: "查询提交",
         review: "审核",
       },
       chips: {

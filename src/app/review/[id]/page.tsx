@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { AdminSubmissionActions } from "@/components/admin-submission-actions";
 import {
+  actionButtonClass,
   EmptyState,
   InsetCard,
   PageHero,
@@ -74,7 +75,7 @@ export default async function ReviewDetailPage({
               status={submission.status as SubmissionStatus}
               locale={locale}
             />
-            <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78">
+            <span className="border border-slate-300 bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700">
               {submission.publicId}
             </span>
           </div>
@@ -89,7 +90,7 @@ export default async function ReviewDetailPage({
           <>
             <a
               href={`/api/admin/reports/${submission.publicId}/bundle`}
-              className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:-translate-y-0.5"
+              className={actionButtonClass("primary")}
             >
               {locale === "zh" ? "下载原始 bundle" : "Download original bundle"}
             </a>
@@ -99,7 +100,7 @@ export default async function ReviewDetailPage({
                   slug: submission.publicCase.slug,
                   payload: submission.publicCase.payload,
                 })}
-                className="rounded-full border border-white/14 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5"
+                className={actionButtonClass("secondary")}
               >
                 {locale === "zh" ? "打开案例详情" : "Open case detail"}
               </Link>
@@ -162,7 +163,7 @@ export default async function ReviewDetailPage({
                 <div className="mt-2 flex flex-wrap gap-2">
                   {Array.isArray(redactionSummary.hiddenSections) && redactionSummary.hiddenSections.length ? (
                     redactionSummary.hiddenSections.map((item) => (
-                      <span key={String(item)} className="rounded-full bg-white px-3 py-1 text-xs text-slate-700">
+                      <span key={String(item)} className="border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700">
                         {String(item)}
                       </span>
                     ))
@@ -176,7 +177,7 @@ export default async function ReviewDetailPage({
                 <div className="mt-2 grid gap-2">
                   {redactionSummary.replacements && typeof redactionSummary.replacements === "object" ? (
                     Object.entries(redactionSummary.replacements as Record<string, unknown>).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between rounded-full bg-white px-3 py-1 text-xs text-slate-700">
+                      <div key={key} className="flex items-center justify-between border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700">
                         <span>{key}</span>
                         <span>{String(value)}</span>
                       </div>
@@ -190,7 +191,7 @@ export default async function ReviewDetailPage({
             {Array.isArray(redactionSummary.flags) && redactionSummary.flags.length ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 {redactionSummary.flags.map((flag) => (
-                  <span key={String(flag)} className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-900">
+                  <span key={String(flag)} className="border border-amber-200 bg-amber-100 px-3 py-1 text-xs text-amber-900">
                     {String(flag)}
                   </span>
                 ))}
@@ -202,9 +203,9 @@ export default async function ReviewDetailPage({
             {previewFindings.map((finding) => (
               <SurfaceCard key={String(finding.findingKey)} className="grid gap-4">
                 <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-                  <span className="rounded-full bg-slate-50 px-3 py-1">{String(finding.reportSkillId || "-")}</span>
-                  {finding.model ? <span className="rounded-full bg-slate-50 px-3 py-1">{String(finding.model)}</span> : null}
-                  {finding.provider ? <span className="rounded-full bg-slate-50 px-3 py-1">{String(finding.provider)}</span> : null}
+                  <span className="border border-slate-300 bg-slate-50 px-3 py-1">{String(finding.reportSkillId || "-")}</span>
+                  {finding.model ? <span className="border border-slate-300 bg-slate-50 px-3 py-1">{String(finding.model)}</span> : null}
+                  {finding.provider ? <span className="border border-slate-300 bg-slate-50 px-3 py-1">{String(finding.provider)}</span> : null}
                 </div>
                 <h2 className="mt-4 text-xl font-semibold">{String(finding.harmType || "-")}</h2>
                 <p className="mt-2 text-sm text-slate-500">{String(finding.vulnerabilitySurface || "-")}</p>

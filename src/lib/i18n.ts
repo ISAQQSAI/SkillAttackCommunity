@@ -14,10 +14,11 @@ const dictionaries = {
   en: {
     shell: {
       brand: "SkillAtlas",
-      tagline: "ATLAS — Attack Trace Library for Agent Skills.",
+      tagline:
+        "Attack Trace Library for Agent Skills — Focusing on decision paths of unsafe behaviors executed by agents and public security cases",
       nav: {
         home: "Home",
-        skills: "Skills",
+        skills: "Vulnerabilities",
         showcase: "Showcase",
         findings: "Findings",
         leaderboards: "Leaderboards",
@@ -312,10 +313,10 @@ const dictionaries = {
   zh: {
     shell: {
       brand: "SkillAtlas",
-      tagline: "ATLAS — Agent Skills 攻击轨迹案例库。",
+      tagline: "智能体风险路径库——聚焦智能体执行不安全行为的决策路径与公开安全案例",
       nav: {
         home: "首页",
-        skills: "技能案例",
+        skills: "漏洞案例",
         showcase: "展示",
         findings: "案例",
         leaderboards: "排行榜",

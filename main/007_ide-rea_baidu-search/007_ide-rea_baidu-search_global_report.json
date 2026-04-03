@@ -1,0 +1,19 @@
+{
+  "surface_summary": {
+    "surface_01_freshness 参数正则绕过风险": {
+      "rounds": 6,
+      "status": "technical",
+      "final_risk_type": "DoS (Denial of Service)"
+    },
+    "surface_02_API速率限制缺失导致DoS风险": {
+      "rounds": 6,
+      "status": "ignore",
+      "final_risk_type": "DoS (Denial of Service)"
+    }
+  },
+  "overall_summary": {
+    "success_count": 0,
+    "ignore_count": 1,
+    "technical_count": 1
+  }
+}

@@ -5,7 +5,13 @@ import { useState } from "react";
 
 import { getDictionary, type Locale } from "@/lib/i18n";
 
-export function LanguageSwitcher({ locale }: { locale: Locale }) {
+export function LanguageSwitcher({
+  locale,
+  shape = "square",
+}: {
+  locale: Locale;
+  shape?: "pill" | "square";
+}) {
   const router = useRouter();
   const [working, setWorking] = useState<Locale | null>(null);
   const dict = getDictionary(locale);
@@ -28,7 +34,13 @@ export function LanguageSwitcher({ locale }: { locale: Locale }) {
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-full border border-black/8 bg-white/82 px-2 py-2 text-xs shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
+    <div
+      className={`flex items-center gap-2 border border-slate-200 bg-[rgba(247,251,255,0.92)] px-2 py-2 text-xs shadow-[0_12px_24px_rgba(15,23,42,0.04)] ${
+        shape === "square"
+          ? "rounded-none shadow-none"
+          : "rounded-none shadow-none"
+      }`}
+    >
       {(["en", "zh"] as const).map((item) => {
         const label = item === "en" ? dict.shell.localeEn : dict.shell.localeZh;
         return (
@@ -37,10 +49,12 @@ export function LanguageSwitcher({ locale }: { locale: Locale }) {
             type="button"
             onClick={() => switchLocale(item)}
             disabled={Boolean(working)}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+            className={`${shape === "square" ? "rounded-none" : "rounded-none"} px-3 py-1.5 text-sm font-medium transition ${
               locale === item
-                ? "bg-slate-950 text-white !text-white shadow-[0_12px_28px_rgba(15,23,42,0.12)] hover:!text-white"
-                : "text-slate-700 hover:bg-slate-100"
+                ? shape === "square"
+                  ? "bg-[#11284e] text-white !text-white hover:!text-white [&_*]:!text-white"
+                  : "bg-[#11284e] text-white !text-white hover:!text-white [&_*]:!text-white"
+                : "text-slate-700 hover:bg-[#f3f7fd]"
             } disabled:opacity-60`}
             style={locale === item ? { color: "#ffffff" } : undefined}
           >

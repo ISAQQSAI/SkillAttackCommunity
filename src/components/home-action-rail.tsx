@@ -3,24 +3,25 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import {
-  actionButtonClass,
-  fieldClass,
-  InsetCard,
-  SurfaceCard,
-} from "@/components/page-chrome";
+import { SurfaceCard } from "@/components/page-chrome";
 import type { Locale } from "@/lib/i18n";
+
+function squareButtonClass(tone: "primary" | "secondary" = "primary") {
+  if (tone === "secondary") {
+    return "inline-flex items-center justify-center border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-slate-400 hover:bg-[#f3f7fd] disabled:cursor-not-allowed disabled:opacity-60";
+  }
+
+  return "inline-flex items-center justify-center border border-[#11284e] bg-[#11284e] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#0d1f3b] disabled:cursor-not-allowed disabled:opacity-60";
+}
+
+function squareFieldClass() {
+  return "w-full border border-slate-300 bg-[#fbfdff] px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#244980] focus:bg-white file:mr-4 file:border-0 file:bg-[#11284e] file:px-4 file:py-3 file:text-sm file:font-medium file:text-white hover:file:bg-[#0d1f3b]";
+}
 
 export function HomeActionRail({
   locale,
-  previewReadyCount,
-  pendingReviewCount,
-  isAdmin,
 }: {
   locale: Locale;
-  previewReadyCount: number;
-  pendingReviewCount: number;
-  isAdmin: boolean;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -30,48 +31,50 @@ export function HomeActionRail({
     locale === "zh"
       ? {
           uploadEyebrow: "上传入口",
-          uploadTitle: "上传 bundle",
+          uploadTitle: "上传漏洞报告",
           uploadBody:
-            "首页直接上传 `report_bundle.zip`。系统会先生成脱敏预览，再跳转到完整确认页完成正式提交。",
+            "上传 zip 压缩包后，系统会先生成一份公开预览。你确认展示内容没有问题后，才会正式提交审核。",
           chooseFile: "选择 zip 文件",
-          upload: "上传并生成预览",
+          upload: "上传并查看预览",
           uploading: "解析中...",
-          uploadHint: "仅支持标准化 report bundle，预览生成后不会直接公开。",
-          openFullUpload: "打开完整上传页",
+          uploadHint: "原始 zip、原始 JSON 和完整轨迹不会直接公开；公开页面只会使用审核后的安全摘要。",
+          openFullUpload: "进入完整上传页",
+          stepOne: "1 上传 zip 文件",
+          stepTwo: "2 检查可公开预览",
+          stepThree: "3 提交并保存查询回执",
           trackerEyebrow: "状态查询",
-          trackerTitle: "查询提交状态",
+          trackerTitle: "查询我的提交",
           trackerBody:
-            "输入 submission ID 和 tracking token，查看审核进度、管理员结论，以及是否已经发布为公开案例。",
-          submissionId: "Submission ID",
-          trackingToken: "Tracking Token",
-          track: "查询状态",
-          openTracker: "打开状态查询页",
-          previewReady: "预览待确认",
-          pendingReview: "待管理员处理",
-          adminQueue: "打开审核后台",
+            "输入提交编号和查询回执，查看当前进度、平台反馈，以及是否已经发布为公开页面。",
+          submissionId: "提交编号",
+          trackingToken: "查询回执",
+          track: "查看进度",
+          openTracker: "进入查询页",
+          trackerHint: "正式提交后，这两个值就是你的查询凭证。",
           chooseFirst: "请先选择 zip 文件。",
         }
       : {
           uploadEyebrow: "Upload entry",
-          uploadTitle: "Upload bundle",
+          uploadTitle: "Submit a vulnerability report",
           uploadBody:
-            "Start from the home page by uploading `report_bundle.zip`. The server generates a sanitized preview first, then sends you to the full confirmation page for formal submission.",
+            "Upload your zip bundle and the server will build a public preview first. You review that preview before anything is formally submitted for review.",
           chooseFile: "Choose zip file",
-          upload: "Upload and build preview",
+          upload: "Upload and preview",
           uploading: "Parsing bundle...",
-          uploadHint: "Only standardized report bundles are supported, and nothing is published directly from this step.",
+          uploadHint: "Raw bundles, raw JSON, and full trajectories are never published directly. Public pages use reviewed summaries only.",
           openFullUpload: "Open full upload page",
+          stepOne: "1 Upload the zip",
+          stepTwo: "2 Review the public preview",
+          stepThree: "3 Submit and save your receipt",
           trackerEyebrow: "Status lookup",
-          trackerTitle: "Track submission",
+          trackerTitle: "Track my submission",
           trackerBody:
-            "Enter your submission ID and tracking token to check review progress, admin conclusions, and publication state.",
-          submissionId: "Submission ID",
-          trackingToken: "Tracking token",
-          track: "Track status",
+            "Enter your submission number and tracking receipt to see progress, platform feedback, and whether the report has been published.",
+          submissionId: "Submission number",
+          trackingToken: "Tracking receipt",
+          track: "Check status",
           openTracker: "Open tracking page",
-          previewReady: "Preview ready",
-          pendingReview: "Pending admin review",
-          adminQueue: "Open admin queue",
+          trackerHint: "These two values become your lookup receipt after formal submission.",
           chooseFirst: "Choose a zip file first.",
         };
 
@@ -113,12 +116,12 @@ export function HomeActionRail({
 
   return (
     <div className="grid gap-4 xl:sticky xl:top-24">
-      <SurfaceCard className="grid gap-5">
+      <SurfaceCard className="grid gap-5 rounded-none border-slate-200 hover:shadow-none">
         <div className="grid gap-2">
           <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
             {copy.uploadEyebrow}
           </div>
-          <h2 className="text-[1.65rem] font-semibold tracking-[-0.05em] text-slate-950">
+          <h2 className="text-[1.55rem] font-semibold tracking-[-0.04em] text-slate-950">
             {copy.uploadTitle}
           </h2>
           <p className="text-sm leading-7 text-slate-600">{copy.uploadBody}</p>
@@ -131,53 +134,40 @@ export function HomeActionRail({
               type="file"
               accept=".zip,application/zip"
               onChange={(event) => setFile(event.target.files?.[0] || null)}
-              className={fieldClass("input")}
+              className={squareFieldClass()}
             />
           </label>
-          <button type="submit" disabled={uploading} className={actionButtonClass("primary")}>
+          <button type="submit" disabled={uploading} className={squareButtonClass("primary")}>
             {uploading ? copy.uploading : copy.upload}
           </button>
         </form>
 
-        <InsetCard className="grid gap-3 text-sm">
+        <div className="grid gap-3 border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f2f7fc)] p-4 text-sm">
           <p className="leading-7 text-slate-700">{copy.uploadHint}</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-[1.2rem] bg-white px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                {copy.previewReady}
-              </div>
-              <div className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-slate-950">
-                {previewReadyCount}
-              </div>
-            </div>
-            <div className="rounded-[1.2rem] bg-white px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                {copy.pendingReview}
-              </div>
-              <div className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-slate-950">
-                {pendingReviewCount}
-              </div>
-            </div>
+          <div className="grid gap-2">
+            <div className="border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{copy.stepOne}</div>
+            <div className="border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{copy.stepTwo}</div>
+            <div className="border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{copy.stepThree}</div>
           </div>
-        </InsetCard>
+        </div>
 
         {error ? (
-          <div className="rounded-[1.2rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          <div className="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
             {error}
           </div>
         ) : null}
 
-        <Link href="/submit" className={actionButtonClass("secondary")}>
+        <Link href="/submit" className={squareButtonClass("secondary")}>
           {copy.openFullUpload}
         </Link>
       </SurfaceCard>
 
-      <SurfaceCard className="grid gap-5">
+      <SurfaceCard className="grid gap-5 rounded-none border-slate-200 hover:shadow-none">
         <div className="grid gap-2">
           <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
             {copy.trackerEyebrow}
           </div>
-          <h2 className="text-[1.65rem] font-semibold tracking-[-0.05em] text-slate-950">
+          <h2 className="text-[1.55rem] font-semibold tracking-[-0.04em] text-slate-950">
             {copy.trackerTitle}
           </h2>
           <p className="text-sm leading-7 text-slate-600">{copy.trackerBody}</p>
@@ -187,28 +177,25 @@ export function HomeActionRail({
           <input
             name="id"
             placeholder={copy.submissionId}
-            className={fieldClass("input")}
+            className={squareFieldClass()}
           />
           <input
             name="token"
             placeholder={copy.trackingToken}
-            className={fieldClass("input")}
+            className={squareFieldClass()}
           />
-          <button type="submit" className={actionButtonClass("primary")}>
+          <button type="submit" className={squareButtonClass("primary")}>
             {copy.track}
           </button>
         </form>
 
-        <div className="flex flex-wrap gap-3">
-          <Link href="/reports" className={actionButtonClass("secondary")}>
-            {copy.openTracker}
-          </Link>
-          {isAdmin ? (
-            <Link href="/review" className={actionButtonClass("ghost")}>
-              {copy.adminQueue}
-            </Link>
-          ) : null}
+        <div className="border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f2f7fc)] px-4 py-3 text-sm leading-7 text-slate-700">
+          {copy.trackerHint}
         </div>
+
+        <Link href="/reports" className={squareButtonClass("secondary")}>
+          {copy.openTracker}
+        </Link>
       </SurfaceCard>
     </div>
   );

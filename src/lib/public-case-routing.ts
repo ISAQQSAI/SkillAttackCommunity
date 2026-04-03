@@ -49,27 +49,27 @@ export function getPrimaryPublicCaseSkillId(payload: unknown) {
 
 export function getPublicCasePath({
   slug,
-  payload,
-  preferredSkillId,
 }: {
   slug: string;
   payload?: unknown;
   preferredSkillId?: string | null;
 }) {
   const normalizedSlug = encodeURIComponent(slug);
-  const skillIds = getPublicCaseSkillIds(payload);
-  const normalizedPreferred = normalizeId(preferredSkillId);
+  return `/vulnerabilities/${normalizedSlug}`;
+}
 
-  if (normalizedPreferred && skillIds.includes(normalizedPreferred)) {
-    return `/skills/${encodeURIComponent(normalizedPreferred)}/cases/${normalizedSlug}`;
-  }
-
-  const primarySkillId = getPrimaryPublicCaseSkillId(payload);
-  if (primarySkillId) {
-    return `/skills/${encodeURIComponent(primarySkillId)}/cases/${normalizedSlug}`;
-  }
-
-  return `/findings/${normalizedSlug}`;
+export function getPublicFindingPath({
+  slug,
+  findingKey,
+  payload,
+  preferredSkillId,
+}: {
+  slug: string;
+  findingKey: string;
+  payload?: unknown;
+  preferredSkillId?: string | null;
+}) {
+  return getPublicCasePath({ slug, payload, preferredSkillId });
 }
 
 export { readJsonList, readJsonRecord };

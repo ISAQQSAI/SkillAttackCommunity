@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   actionButtonClass,
   EmptyState,
+  fieldClass,
   InsetCard,
   PageHero,
   SurfaceCard,
@@ -75,7 +76,7 @@ export default async function ReviewPage({
             name="status"
             defaultValue={status}
             placeholder={locale === "zh" ? "按状态筛选" : "Filter by status"}
-            className="w-full rounded-[1.15rem] border border-black/10 bg-white/92 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70"
+            className={fieldClass("input")}
           />
           <button className={actionButtonClass("primary")}>
             {locale === "zh" ? "筛选" : "Filter"}
@@ -90,7 +91,7 @@ export default async function ReviewPage({
             <Link
               key={submission.publicId}
               href={`/review/${submission.publicId}`}
-              className="group grid gap-4 rounded-[1.75rem] border border-black/8 bg-white/88 p-5 shadow-[0_24px_72px_rgba(15,23,42,0.08)] transition hover:-translate-y-1"
+              className="group grid gap-4 border border-slate-200 bg-white p-5 transition hover:border-slate-300"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
@@ -98,7 +99,7 @@ export default async function ReviewPage({
                     status={submission.status as SubmissionStatus}
                     locale={locale}
                   />
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs uppercase tracking-[0.16em] text-slate-600">
+                  <span className="border border-slate-300 bg-slate-100 px-3 py-1 text-xs uppercase tracking-[0.16em] text-slate-600">
                     {submission.publicId}
                   </span>
                 </div>
@@ -148,12 +149,12 @@ export default async function ReviewPage({
               </div>
               <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
                 {submission.submitterLabel ? (
-                  <span className="rounded-full bg-slate-50 px-3 py-1">{submission.submitterLabel}</span>
+                  <span className="border border-slate-300 bg-slate-50 px-3 py-1">{submission.submitterLabel}</span>
                 ) : null}
                 {submission.contactEmail ? (
-                  <span className="rounded-full bg-slate-50 px-3 py-1">{submission.contactEmail}</span>
+                  <span className="border border-slate-300 bg-slate-50 px-3 py-1">{submission.contactEmail}</span>
                 ) : null}
-                <span className="rounded-full bg-slate-50 px-3 py-1">
+                <span className="border border-slate-300 bg-slate-50 px-3 py-1">
                   {submission.redactionSummary && typeof submission.redactionSummary === "object"
                     ? locale === "zh"
                       ? "含脱敏规则"

@@ -18,6 +18,14 @@ export interface ParsedSubmissionFinding {
   smokingGunPreview?: string;
   evidenceSummaryPreview?: string;
   finalResponsePreview?: string;
+  trajectoryTimeline: Array<{
+    stepIndex: number;
+    relativeMs?: number;
+    type: string;
+    tool?: string;
+    status?: "ok" | "error";
+    summary: string;
+  }>;
   redactionFlags: string[];
   judgeSummary: Record<string, unknown>;
 }
@@ -64,6 +72,14 @@ export interface ParsedBundlePreview {
     smokingGunPreview?: string;
     evidenceSummaryPreview?: string;
     finalResponsePreview?: string;
+    trajectoryTimeline: Array<{
+      stepIndex: number;
+      relativeMs?: number;
+      type: string;
+      tool?: string;
+      status?: "ok" | "error";
+      summary: string;
+    }>;
     redactionFlags: string[];
   }>;
   redactionSummary: {
@@ -266,6 +282,82 @@ function toNumber(value: unknown) {
   return typeof value === "number" ? value : undefined;
 }
 
+function sanitizeStructuredValue(value: unknown, maxLength: number) {
+  const raw =
+    typeof value === "string"
+      ? value
+      : value && typeof value === "object"
+        ? JSON.stringify(value)
+        : String(value || "");
+  return sanitizeText(raw, maxLength);
+}
+
+function extractTrajectoryTimeline(agentTrajectory: Record<string, unknown>) {
+  const steps = ensureArray<Record<string, unknown>>(agentTrajectory.trajectory);
+  const flags = new Set<string>();
+  const replacements: Record<string, number> = {};
+  const firstTimestamp = steps.find((item) => typeof item.timestamp === "number")?.timestamp;
+  const timeline: ParsedSubmissionFinding["trajectoryTimeline"] = [];
+
+  for (const step of steps) {
+    const stepType = compactText(step.type) || "unknown";
+    const stepIndex = toNumber(step.step_index) || timeline.length + 1;
+    const timestamp = toNumber(step.timestamp);
+    let sanitized;
+    let tool: string | undefined;
+    let status: "ok" | "error" | undefined;
+
+    if (stepType === "assistant_message") {
+      sanitized = sanitizeText(step.text, 220);
+    } else if (stepType === "tool_call") {
+      tool = compactText(step.tool) || undefined;
+      const argumentsText =
+        tool === "write"
+          ? {
+              path: ensureRecord(step.arguments).path,
+            }
+          : ensureRecord(step.arguments);
+      sanitized = sanitizeStructuredValue(
+        tool ? { tool, arguments: argumentsText } : argumentsText,
+        220
+      );
+    } else if (stepType === "tool_result") {
+      tool = compactText(step.tool) || undefined;
+      status = step.is_error ? "error" : "ok";
+      sanitized = sanitizeStructuredValue(step.result_text, 240);
+    } else {
+      sanitized = sanitizeText(step.text || step.result_text, 220);
+    }
+
+    mergeReplacements(replacements, sanitized.replacements);
+    for (const flag of sanitized.flags) {
+      flags.add(flag);
+    }
+
+    if (!sanitized.text) {
+      continue;
+    }
+
+    timeline.push({
+      stepIndex,
+      relativeMs:
+        typeof firstTimestamp === "number" && typeof timestamp === "number"
+          ? Math.max(0, timestamp - firstTimestamp)
+          : undefined,
+      type: stepType,
+      tool,
+      status,
+      summary: sanitized.text,
+    });
+  }
+
+  return {
+    timeline,
+    flags: [...flags],
+    replacements,
+  };
+}
+
 export function parseReportBundle(buffer: Buffer): ParsedReportBundle {
   const zip = new AdmZip(buffer);
   const bundleMeta = readJsonEntry(zip, "bundle_meta.json");
@@ -355,17 +447,20 @@ export function parseReportBundle(buffer: Buffer): ParsedReportBundle {
       const smokingGun = sanitizeText(combineSmokingGun(judge.smoking_gun), 420);
       const evidenceSummary = sanitizeText(pickEvidenceSummary(observations, judge), 360);
       const finalResponse = sanitizeText(trajectory.final_response, 420);
+      const trajectoryTimeline = extractTrajectoryTimeline(trajectory);
 
       mergeReplacements(globalReplacements, harmfulPrompt.replacements);
       mergeReplacements(globalReplacements, smokingGun.replacements);
       mergeReplacements(globalReplacements, evidenceSummary.replacements);
       mergeReplacements(globalReplacements, finalResponse.replacements);
+      mergeReplacements(globalReplacements, trajectoryTimeline.replacements);
 
       for (const flag of [
         ...harmfulPrompt.flags,
         ...smokingGun.flags,
         ...evidenceSummary.flags,
         ...finalResponse.flags,
+        ...trajectoryTimeline.flags,
       ]) {
         globalFlags.add(flag);
       }
@@ -376,6 +471,7 @@ export function parseReportBundle(buffer: Buffer): ParsedReportBundle {
           ...smokingGun.flags,
           ...evidenceSummary.flags,
           ...finalResponse.flags,
+          ...trajectoryTimeline.flags,
         ]),
       ];
 
@@ -398,6 +494,7 @@ export function parseReportBundle(buffer: Buffer): ParsedReportBundle {
         smokingGunPreview: smokingGun.text || undefined,
         evidenceSummaryPreview: evidenceSummary.text || undefined,
         finalResponsePreview: finalResponse.text || undefined,
+        trajectoryTimeline: trajectoryTimeline.timeline,
         redactionFlags: perFindingFlags,
         judgeSummary: {
           verdict: compactText(judge.verdict) || undefined,
@@ -445,6 +542,7 @@ export function parseReportBundle(buffer: Buffer): ParsedReportBundle {
       smokingGunPreview: finding.smokingGunPreview,
       evidenceSummaryPreview: finding.evidenceSummaryPreview,
       finalResponsePreview: finding.finalResponsePreview,
+      trajectoryTimeline: finding.trajectoryTimeline,
       redactionFlags: finding.redactionFlags,
     })),
     redactionSummary,

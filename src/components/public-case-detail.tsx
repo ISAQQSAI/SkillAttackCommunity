@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AttackPathTimeline } from "@/components/attack-path-timeline";
 import {
   InsetCard,
   PageHero,
@@ -8,12 +9,11 @@ import {
 } from "@/components/page-chrome";
 import type { Locale } from "@/lib/i18n";
 import {
-  getPrimaryPublicCaseSkillId,
-  getPublicCaseSkillIds,
-  getPublicCasePath,
+  getPublicFindingPath,
   readJsonList,
   readJsonRecord,
 } from "@/lib/public-case-routing";
+import { formatVerdictLabel, parseSkillPresentation } from "@/lib/public-presentation";
 import type { getPublicCaseBySlug } from "@/lib/server/report-submissions";
 
 type PublicCaseRecord = NonNullable<Awaited<ReturnType<typeof getPublicCaseBySlug>>>;
@@ -29,37 +29,50 @@ function formatDate(locale: Locale, value?: string | Date | null) {
   }).format(date);
 }
 
+function readTrajectorySteps(value: unknown) {
+  return readJsonList(value)
+    .map((item) => {
+      const record = readJsonRecord(item);
+      const status: "ok" | "error" | undefined =
+        record.status === "error" ? "error" : record.status === "ok" ? "ok" : undefined;
+      return {
+        stepIndex: Number(record.stepIndex || 0),
+        relativeMs:
+          typeof record.relativeMs === "number" ? record.relativeMs : Number(record.relativeMs || 0),
+        type: String(record.type || ""),
+        tool: String(record.tool || ""),
+        status,
+        summary: String(record.summary || ""),
+      };
+    })
+    .filter((item) => item.summary);
+}
+
 export function PublicCaseDetail({
   locale,
   result,
-  skillContextId,
 }: {
   locale: Locale;
   result: PublicCaseRecord;
-  skillContextId?: string | null;
 }) {
   const payload = readJsonRecord(result.payload);
   const bundle = readJsonRecord(payload.bundle);
   const findings = readJsonList(payload.findings).map((item) => readJsonRecord(item));
   const reports = readJsonList(payload.reports).map((item) => readJsonRecord(item));
-  const coveredSkillIds = getPublicCaseSkillIds(result.payload);
-  const primarySkillId = getPrimaryPublicCaseSkillId(result.payload);
-  const activeSkillId =
-    skillContextId && coveredSkillIds.includes(skillContextId) ? skillContextId : primarySkillId;
-  const activeReport =
-    reports.find((report) => String(report.skillId || "").trim() === activeSkillId) || null;
+  const coveredSkillIds = [...new Set(reports.map((report) => String(report.skillId || "").trim()).filter(Boolean))];
+  const sourceLinks = reports
+    .map((report) => String(report.sourceLink || "").trim())
+    .filter(Boolean);
 
   return (
     <div className="grid gap-6">
       <PageHero
         eyebrow={
           <div className="flex flex-wrap items-center gap-2">
-            <span>{locale === "zh" ? "管理员已审核" : "admin verified"}</span>
-            {activeSkillId ? (
-              <span className="rounded-full bg-lime-300 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-slate-950">
-                {locale === "zh" ? "技能上下文" : "skill context"} · {activeSkillId}
-              </span>
-            ) : null}
+            <span>{locale === "zh" ? "公开结果页" : "Published result"}</span>
+            <span className="rounded-full bg-lime-300 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-slate-950">
+              {locale === "zh" ? "已审核并发布" : "Reviewed and published"}
+            </span>
             <span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-slate-600">
               {formatDate(locale, result.publishedAt)}
             </span>
@@ -68,47 +81,37 @@ export function PublicCaseDetail({
         title={result.title}
         description={result.summary}
         actions={
-          <>
-            {activeSkillId ? (
-              <Link
-                href={`/skills/${encodeURIComponent(activeSkillId)}`}
-                className="rounded-full bg-white px-4 py-2.5 text-sm font-medium text-slate-950 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5"
-              >
-                {locale === "zh" ? "返回当前技能页" : "Back to this skill"}
-              </Link>
-            ) : null}
-            <Link
-              href="/skills"
-              className="rounded-full border border-black/10 bg-white/90 px-4 py-2.5 text-sm font-medium text-slate-800 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5"
-            >
-              {locale === "zh" ? "返回技能案例库" : "Back to public skills"}
-            </Link>
-          </>
+          <Link
+            href="/vulnerabilities"
+            className="rounded-full bg-white px-4 py-2.5 text-sm font-medium text-slate-950 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5"
+          >
+            {locale === "zh" ? "返回漏洞列表" : "Back to vulnerabilities"}
+          </Link>
         }
         aside={
           <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
             <InsetCard tone="white">
               <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {locale === "zh" ? "当前技能" : "Active skill"}
+                {locale === "zh" ? "公开漏洞" : "Public vulnerabilities"}
               </div>
-              <div className="mt-3 text-xl font-semibold tracking-[-0.04em] text-slate-950">
-                {activeSkillId || "-"}
+              <div className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-slate-950">
+                {findings.length}
               </div>
             </InsetCard>
             <InsetCard tone="white">
               <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {locale === "zh" ? "涉及 reports" : "Reports"}
+                {locale === "zh" ? "涉及对象" : "Affected targets"}
               </div>
               <div className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-slate-950">
-                {String(bundle.reportCount || reports.length || 0)}
+                {coveredSkillIds.length || String(bundle.reportCount || reports.length || 0)}
               </div>
             </InsetCard>
             <InsetCard tone="tint">
               <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {locale === "zh" ? "涉及 findings" : "Findings"}
+                {locale === "zh" ? "公开来源" : "References"}
               </div>
               <div className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-slate-950">
-                {findings.length}
+                {sourceLinks.length || (bundle.source ? 1 : 0)}
               </div>
             </InsetCard>
           </div>
@@ -118,7 +121,7 @@ export function PublicCaseDetail({
       {payload.verificationSummary ? (
         <SurfaceCard>
           <h2 className="text-2xl font-semibold tracking-[-0.04em]">
-            {locale === "zh" ? "审核结论" : "Verification summary"}
+            {locale === "zh" ? "发布说明" : "Published note"}
           </h2>
           <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-700">
             {String(payload.verificationSummary)}
@@ -126,39 +129,53 @@ export function PublicCaseDetail({
         </SurfaceCard>
       ) : null}
 
-      {(activeReport?.sourceLink || bundle.source) ? (
+      {(sourceLinks.length || bundle.source) ? (
         <SurfaceCard>
           <SectionHeading
-            title={locale === "zh" ? "技能上下文" : "Skill context"}
+            title={locale === "zh" ? "公开来源与对象" : "Public references and targets"}
             description={
               locale === "zh"
-                ? "这个案例页在公开层面挂在技能详情下面，便于沿着 skill 浏览它的风险样本。"
-                : "This case page sits under the skill detail view so the public library can be browsed skill by skill."
+                ? "这次公开结果覆盖了哪些对象，以及你可以继续查看的公开来源。"
+                : "See which targets are affected in this published result and which public references remain available."
             }
           />
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <InsetCard className="text-sm">
               <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                {locale === "zh" ? "技能 ID" : "Skill ID"}
+                {locale === "zh" ? "涉及对象" : "Affected targets"}
               </div>
-              <div className="mt-2 text-slate-800">{activeSkillId || "-"}</div>
+              <div className="mt-2 grid gap-2">
+                {coveredSkillIds.map((skillId) => {
+                  const target = parseSkillPresentation(skillId);
+                  return (
+                    <div key={skillId} className="rounded-full bg-white px-3 py-2 text-slate-800">
+                      {target.targetLabel}
+                    </div>
+                  );
+                })}
+              </div>
             </InsetCard>
             <InsetCard className="text-sm">
               <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                {locale === "zh" ? "来源链接" : "Source link"}
+                {locale === "zh" ? "公开来源" : "Public references"}
               </div>
-              {activeReport?.sourceLink ? (
-                <a
-                  href={String(activeReport.sourceLink)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-flex break-all text-slate-700 underline-offset-4 hover:underline"
-                >
-                  {String(activeReport.sourceLink)}
-                </a>
-              ) : (
-                <div className="mt-2 text-slate-800">{String(bundle.source || "-")}</div>
-              )}
+              <div className="mt-2 grid gap-2">
+                {sourceLinks.length
+                  ? sourceLinks.map((sourceLink) => (
+                      <a
+                        key={sourceLink}
+                        href={sourceLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex break-all text-slate-700 underline-offset-4 hover:underline"
+                      >
+                        {sourceLink}
+                      </a>
+                    ))
+                  : (
+                      <div className="text-slate-800">{String(bundle.source || "-")}</div>
+                    )}
+              </div>
             </InsetCard>
           </div>
         </SurfaceCard>
@@ -167,9 +184,15 @@ export function PublicCaseDetail({
       <section className="grid gap-4">
         {findings.map((finding) => (
           <SurfaceCard key={String(finding.findingKey)} className="grid gap-4">
+            {(() => {
+              const skillId = String(finding.reportSkillId || "").trim();
+              const target = parseSkillPresentation(skillId);
+
+              return (
+                <>
             <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-              {finding.reportSkillId ? (
-                <span className="rounded-full bg-slate-50 px-3 py-1">{String(finding.reportSkillId)}</span>
+              {skillId ? (
+                <span className="rounded-full bg-slate-50 px-3 py-1">{target.targetLabel}</span>
               ) : null}
               {finding.model ? <span className="rounded-full bg-slate-50 px-3 py-1">{String(finding.model)}</span> : null}
               {finding.provider ? (
@@ -187,9 +210,11 @@ export function PublicCaseDetail({
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <InsetCard>
                 <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                  {locale === "zh" ? "判定" : "Verdict"}
+                  {locale === "zh" ? "公开结论" : "Result"}
                 </div>
-                <div className="mt-2 text-slate-800">{String(finding.verdict || "-")}</div>
+                <div className="mt-2 text-slate-800">
+                  {formatVerdictLabel(locale, String(finding.verdict || ""))}
+                </div>
               </InsetCard>
               <InsetCard>
                 <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
@@ -205,88 +230,67 @@ export function PublicCaseDetail({
                   {String(finding.evidenceSummaryPreview || "-")}
                 </div>
               </InsetCard>
-            </div>
-            <div className="grid gap-3 lg:grid-cols-3">
               <InsetCard>
                 <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                  {locale === "zh" ? "攻击输入摘要" : "Prompt summary"}
+                  {locale === "zh" ? "轨迹步骤" : "Trajectory steps"}
                 </div>
-                <p className="mt-2 leading-7 text-slate-700">
-                  {String(finding.harmfulPromptPreview || "-")}
-                </p>
-              </InsetCard>
-              <InsetCard>
-                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                  {locale === "zh" ? "关键证据" : "Smoking gun"}
+                <div className="mt-2 text-slate-800">
+                  {readTrajectorySteps(finding.trajectoryTimeline).length}
                 </div>
-                <p className="mt-2 leading-7 text-slate-700">
-                  {String(finding.smokingGunPreview || "-")}
-                </p>
-              </InsetCard>
-              <InsetCard>
-                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                  {locale === "zh" ? "最终响应摘要" : "Final response summary"}
-                </div>
-                <p className="mt-2 leading-7 text-slate-700">
-                  {String(finding.finalResponsePreview || "-")}
-                </p>
               </InsetCard>
             </div>
+            <AttackPathTimeline
+              locale={locale}
+              finding={finding}
+              compact
+              title={locale === "zh" ? "攻击路径摘要" : "Attack path summary"}
+            />
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href={getPublicFindingPath({
+                  slug: result.slug,
+                  findingKey: String(finding.findingKey || ""),
+                  payload: result.payload,
+                  preferredSkillId: skillId,
+                })}
+                className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-medium text-white !text-white shadow-[0_14px_34px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:!text-white"
+              >
+                {locale === "zh" ? "查看漏洞详情" : "Open vulnerability detail"}
+              </Link>
+            </div>
+                </>
+              );
+            })()}
           </SurfaceCard>
         ))}
       </section>
 
       <SurfaceCard>
         <SectionHeading
-          title={locale === "zh" ? "覆盖技能与来源" : "Covered skills and sources"}
+          title={locale === "zh" ? "涉及对象概览" : "Affected targets overview"}
           description={
             locale === "zh"
-              ? "一个公开案例可能覆盖多个 skill；这里保留技能页入口和可公开的来源链接。"
-              : "A public case can cover multiple skills; this section keeps the skill entry points and public-safe source links."
+              ? "这次发布一共覆盖了哪些对象，以及每个对象下包含多少条公开漏洞。"
+              : "See which targets are covered in this publication and how many public vulnerabilities belong to each target."
           }
         />
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {reports.map((report, index) => {
             const skillId = String(report.skillId || "").trim();
-            const isActive = skillId && skillId === activeSkillId;
+            const target = parseSkillPresentation(skillId);
 
             return (
               <InsetCard key={`${skillId || "report"}-${index}`} className="text-sm">
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="font-semibold text-slate-900">{skillId || "-"}</div>
-                  {isActive ? (
-                    <span className="rounded-full bg-slate-950 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-white">
-                      {locale === "zh" ? "当前上下文" : "active"}
-                    </span>
-                  ) : null}
+                  <div className="font-semibold text-slate-900">{target.targetLabel || "-"}</div>
                 </div>
                 <div className="mt-2 text-slate-600">
-                  {(locale === "zh" ? "发现数" : "Findings")}: {String(report.findingCount ?? "-")}
+                  {(locale === "zh" ? "公开漏洞" : "Vulnerabilities")}: {String(report.findingCount ?? "-")}
                 </div>
                 <div className="text-slate-600">
-                  {(locale === "zh" ? "成功 surface" : "Successful surfaces")}: {String(report.successfulSurfaceCount ?? "-")}
+                  {(locale === "zh" ? "成功入口" : "Successful surfaces")}: {String(report.successfulSurfaceCount ?? "-")}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-3">
-                  {skillId ? (
-                    <Link
-                      href={`/skills/${encodeURIComponent(skillId)}`}
-                      className="inline-flex text-slate-700 underline-offset-4 hover:underline"
-                    >
-                      {locale === "zh" ? "打开技能页" : "Open skill page"}
-                    </Link>
-                  ) : null}
-                  {skillId ? (
-                    <Link
-                      href={getPublicCasePath({
-                        slug: result.slug,
-                        payload: result.payload,
-                        preferredSkillId: skillId,
-                      })}
-                      className="inline-flex text-slate-700 underline-offset-4 hover:underline"
-                    >
-                      {locale === "zh" ? "以该技能视角查看案例" : "Open case in this skill"}
-                    </Link>
-                  ) : null}
                   {report.sourceLink ? (
                     <a
                       href={String(report.sourceLink)}

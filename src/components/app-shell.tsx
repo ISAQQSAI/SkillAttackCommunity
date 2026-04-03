@@ -8,7 +8,7 @@ import { signOut } from "next-auth/react";
 import type { Viewer } from "@/lib/community";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { actionButtonClass } from "@/components/page-chrome";
-import { getDictionary, translateRole, type Locale } from "@/lib/i18n";
+import { getDictionary, type Locale } from "@/lib/i18n";
 import { skillAttackLinks } from "@/lib/skillattack-links";
 
 interface AppShellProps {
@@ -22,58 +22,65 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
   const dict = getDictionary(locale);
   const pathname = usePathname();
   const isLandingPage = pathname === "/";
+  const isReviewArea = pathname === "/review" || pathname.startsWith("/review/");
   const nav = [
     { href: "/home", label: dict.shell.nav.home },
-    { href: "/skills", label: dict.shell.nav.skills },
+    { href: "/vulnerabilities", label: dict.shell.nav.skills },
     { href: "/submit", label: dict.shell.nav.submit },
     { href: "/reports", label: locale === "zh" ? "查询提交" : "Track submission" },
-    ...(viewer && viewer.role === "admin"
+    ...(isReviewArea && viewer && viewer.role === "admin"
       ? [{ href: "/review", label: dict.shell.nav.review }]
       : []),
   ];
   const externalLinks = [
     {
+      href: skillAttackLinks.arxivUrl,
+      label: locale === "zh" ? "论文" : "Paper",
+      icon: <PaperIcon />,
+    },
+    {
       href: skillAttackLinks.repoUrl,
       label: locale === "zh" ? "GitHub 仓库" : "GitHub repository",
       icon: <GitHubIcon />,
     },
-    {
-      href: skillAttackLinks.showcaseUrl,
-      label: locale === "zh" ? "展示界面" : "Showcase view",
-      icon: <ShowcaseIcon />,
-    },
-    {
-      href: skillAttackLinks.arxivUrl,
-      label: locale === "zh" ? "arXiv 占位链接" : "arXiv placeholder",
-      icon: <ArxivIcon />,
-    },
+  ];
+  const footerLinks = [
+    { href: skillAttackLinks.arxivUrl, label: "Paper", external: true },
+    { href: skillAttackLinks.repoUrl, label: "GitHub", external: true },
+    { href: "/vulnerabilities", label: "Methodology", external: false },
   ];
 
   function isActive(href: string) {
-    if (href === "/skills" && (pathname === "/findings" || pathname.startsWith("/findings/"))) {
+    if (
+      href === "/vulnerabilities" &&
+      (pathname === "/findings" ||
+        pathname.startsWith("/findings/") ||
+        pathname === "/vulnerabilities" ||
+        pathname.startsWith("/vulnerabilities/") ||
+        pathname === "/skills" ||
+        pathname.startsWith("/skills/"))
+    ) {
       return true;
     }
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(255,108,71,0.16),_transparent_24%),radial-gradient(circle_at_82%_14%,_rgba(0,143,126,0.12),_transparent_18%),radial-gradient(circle_at_bottom_left,_rgba(255,220,160,0.28),_transparent_24%),linear-gradient(180deg,_#f7f1e6,_#efe6d7_48%,_#f7f2ea)] text-slate-900">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.018)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.018)_1px,transparent_1px)] bg-[size:26px_26px] opacity-55" />
-      <div className="pointer-events-none absolute -left-24 top-24 h-72 w-72 rounded-full bg-amber-200/35 blur-3xl" />
-      <div className="pointer-events-none absolute -right-28 top-48 h-80 w-80 rounded-full bg-emerald-200/25 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-white/30 blur-3xl" />
+    <div className="relative min-h-screen overflow-hidden bg-[#eaf1f8] text-slate-900">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(29,78,216,0.12),transparent_32%),radial-gradient(circle_at_85%_12%,rgba(14,116,144,0.08),transparent_22%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.03)_1px,transparent_1px)] bg-[size:28px_28px] opacity-45" />
       {isLandingPage ? null : (
-        <header className="sticky top-0 z-40 border-b border-black/6 bg-[rgba(247,241,230,0.74)] backdrop-blur-xl">
+        <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-[rgba(242,247,253,0.9)] backdrop-blur-xl">
           <div className="mx-auto grid w-full max-w-7xl gap-3 px-5 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_max-content] lg:items-center lg:py-5">
             <div className="grid grid-cols-[auto_1fr] items-center gap-4">
               <Link href="/home" className="text-slate-950">
                 <Image
                   src="/skillatlas-logo-5-2-6.svg"
                   alt="SkillAtlas logo"
-                  width={112}
-                  height={112}
+                  width={128}
+                  height={128}
                   unoptimized
-                  className="h-20 w-20 rounded-[1.6rem] border border-black/8 bg-white/95 p-1.5 object-contain shadow-[0_14px_36px_rgba(15,23,42,0.1)] sm:h-24 sm:w-24"
+                  className="h-24 w-24 rounded-none border border-slate-200/80 p-0.5 object-contain shadow-[0_14px_32px_rgba(15,23,42,0.05)] sm:h-28 sm:w-28"
                 />
               </Link>
               <div className="flex min-w-0 flex-col gap-1">
@@ -89,7 +96,7 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
               <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                <div className="flex items-center gap-2 rounded-full border border-black/8 bg-white/75 px-2 py-2 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
+                <div className="flex items-center gap-2 rounded-none border border-slate-200 bg-[rgba(247,251,255,0.88)] px-2 py-2 shadow-[0_12px_24px_rgba(15,23,42,0.04)]">
                   {externalLinks.map((item) => (
                     <a
                       key={item.href}
@@ -98,19 +105,18 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
                       rel="noreferrer"
                       aria-label={item.label}
                       title={item.label}
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-black/8 bg-white text-slate-700 transition hover:-translate-y-0.5 hover:text-slate-950"
+                      className="flex h-9 w-9 items-center justify-center rounded-none border border-slate-200 bg-white text-slate-600 transition hover:border-[#11284e] hover:bg-[#11284e] hover:text-white"
                     >
                       {item.icon}
                     </a>
                   ))}
                 </div>
-                <LanguageSwitcher locale={locale} />
-                {viewer ? (
+                <LanguageSwitcher locale={locale} shape="square" />
+                {isReviewArea && viewer ? (
                   <>
-                    <div className="rounded-full border border-black/8 bg-white/80 px-3.5 py-1.5 text-sm shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-                      {viewer.name} · {translateRole(viewer.role, locale)}
-                      {viewer.isLocal ? ` · ${locale === "zh" ? "仅本地" : "local only"}` : ""}
-                      {viewer.isDemo ? ` · ${dict.shell.demoMode}` : ""}
+                    <div className="rounded-none border border-slate-200 bg-[rgba(247,251,255,0.9)] px-3.5 py-1.5 text-sm shadow-[0_12px_24px_rgba(15,23,42,0.04)]">
+                      {locale === "zh" ? "审核后台" : "Review console"}
+                      {viewer.isLocal ? ` · ${locale === "zh" ? "仅本地可用" : "local only"}` : ""}
                     </div>
                     {viewer.isDemo || viewer.isLocal ? null : (
                       <button
@@ -124,19 +130,22 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
                   </>
                 ) : null}
               </div>
-              <div className="flex flex-wrap items-center gap-2 rounded-[1.4rem] border border-black/8 bg-white/72 p-2 shadow-[0_18px_40px_rgba(15,23,42,0.05)] lg:justify-end">
+              <div className="flex flex-wrap items-center gap-2 rounded-none border border-slate-200 bg-[rgba(247,251,255,0.92)] p-2 shadow-[0_14px_32px_rgba(15,23,42,0.05)] lg:justify-end">
                 {nav.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`rounded-full px-3.5 py-2 text-[14px] font-medium transition ${
+                    className={`rounded-none px-3.5 py-2 text-[14px] font-medium transition ${
                       isActive(item.href)
-                        ? "bg-slate-950 text-white !text-white shadow-[0_12px_30px_rgba(15,23,42,0.16)] hover:!text-white visited:!text-white"
-                        : "border border-transparent bg-white/78 text-slate-700 hover:-translate-y-0.5 hover:bg-white"
+                        ? "border border-[#11284e] bg-[#11284e] text-white !text-white hover:!text-white visited:!text-white [&_*]:!text-white"
+                        : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-[#f3f7fd]"
                     }`}
                     style={isActive(item.href) ? { color: "#ffffff" } : undefined}
                   >
-                    <span style={isActive(item.href) ? { color: "#ffffff" } : undefined}>
+                    <span
+                      className={isActive(item.href) ? "!text-white" : undefined}
+                      style={isActive(item.href) ? { color: "#ffffff" } : undefined}
+                    >
                       {item.label}
                     </span>
                   </Link>
@@ -149,6 +158,37 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
       <main className={`relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col ${isLandingPage ? "px-0 py-0" : "px-5 py-8 sm:px-6 lg:py-10"}`}>
         {children}
       </main>
+      <footer className="relative z-10 mt-auto border-t border-slate-200/90 bg-[rgba(242,247,253,0.9)] backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-7xl flex-col items-center gap-4 px-5 py-5 text-sm text-slate-600 sm:px-6">
+          <span className="text-center font-medium tracking-[0.08em] text-slate-700">
+            SkillAtlas © 2026
+          </span>
+          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-center sm:gap-x-12">
+            <span>Sanitized public cases</span>
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:gap-x-5">
+              {footerLinks.map((item, index) => (
+                <span key={item.label} className="flex items-center gap-4">
+                  {item.external ? (
+                    <a
+                      href={item.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="transition hover:text-[#11284e]"
+                    >
+                      {item.label}
+                    </a>
+                  ) : (
+                    <Link href={item.href} className="transition hover:text-[#11284e]">
+                      {item.label}
+                    </Link>
+                  )}
+                  {index < footerLinks.length - 1 ? <span className="text-slate-300">·</span> : null}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
@@ -161,23 +201,12 @@ function GitHubIcon() {
   );
 }
 
-function ShowcaseIcon() {
+function PaperIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5 stroke-current" fill="none" strokeWidth="1.8" aria-hidden="true">
-      <rect x="3.5" y="4.5" width="17" height="12" rx="2.5" />
-      <path d="M8 19.5h8" />
-      <path d="M12 16.5v3" />
-      <path d="m8 9 2.5 2.5L16 8" />
-    </svg>
-  );
-}
-
-function ArxivIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 stroke-current" fill="none" strokeWidth="1.8" aria-hidden="true">
-      <path d="M4.5 18.5 12 5.5l7.5 13" />
-      <path d="M8 13h8" />
-      <path d="M10 16.5h4" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 3.5h6l4 4V20.5H8a2.5 2.5 0 0 1-2.5-2.5V6A2.5 2.5 0 0 1 8 3.5Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14 3.5v4h4" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6M9 15.5h6M9 19h4" />
     </svg>
   );
 }

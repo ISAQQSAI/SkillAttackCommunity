@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { listPublicCases } from "@/lib/server/report-submissions";
+import { listPublicVulnerabilities } from "@/lib/server/public-skills";
 
 export async function GET() {
-  const cases = await listPublicCases();
+  const cases = await listPublicVulnerabilities();
   return NextResponse.json({ cases });
 }

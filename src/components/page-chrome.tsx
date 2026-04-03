@@ -21,69 +21,31 @@ export function PageHero({
   tone?: "light" | "dark";
   className?: string;
 }) {
-  const dark = tone === "dark";
-
   return (
     <section
       className={cx(
-        "relative overflow-hidden rounded-[2rem] border p-6 shadow-[0_28px_90px_rgba(15,23,42,0.12)] sm:p-8",
-        dark
-          ? "border-black/10 bg-[radial-gradient(circle_at_top_left,_rgba(196,255,79,0.16),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(255,122,89,0.18),_transparent_22%),linear-gradient(135deg,_#111827,_#1f2937_52%,_#284653)] text-white"
-          : "border-black/8 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.7),_transparent_25%),linear-gradient(180deg,_rgba(255,255,255,0.96),_rgba(249,246,241,0.92))] text-slate-900",
+        "border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,249,255,0.96))] px-6 py-7 text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.05)] sm:px-8 sm:py-9",
         className
       )}
     >
       <div
         className={cx(
-          "pointer-events-none absolute inset-0",
-          dark
-            ? "bg-[linear-gradient(120deg,_rgba(255,255,255,0.08),_transparent_36%,_rgba(255,255,255,0.03)_72%,_transparent)]"
-            : "bg-[linear-gradient(120deg,_rgba(255,255,255,0.65),_transparent_36%,_rgba(255,255,255,0.18)_72%,_transparent)]"
-        )}
-      />
-      <div
-        className={cx(
-          "pointer-events-none absolute -right-12 top-0 h-44 w-44 rounded-full blur-3xl",
-          dark ? "bg-white/10" : "bg-amber-200/40"
-        )}
-      />
-      <div
-        className={cx(
-          "pointer-events-none absolute -bottom-12 left-8 h-36 w-36 rounded-full blur-3xl",
-          dark ? "bg-lime-200/10" : "bg-emerald-200/40"
-        )}
-      />
-
-      <div
-        className={cx(
-          "relative grid gap-8",
+          "grid gap-8",
           aside ? "xl:grid-cols-[minmax(0,1.35fr)_minmax(19rem,0.9fr)] xl:items-end" : ""
         )}
       >
         <div className="grid gap-5">
           {eyebrow ? (
-            <div
-              className={cx(
-                "w-fit rounded-full px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em]",
-                dark
-                  ? "border border-white/14 bg-white/8 text-white/78"
-                  : "border border-black/8 bg-white/70 text-slate-600"
-              )}
-            >
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
               {eyebrow}
             </div>
           ) : null}
           <div className="grid gap-3">
-            <h1 className={cx("max-w-5xl font-semibold tracking-[-0.07em]", dark ? "text-4xl text-white sm:text-5xl" : "text-3xl sm:text-4xl")}>
+            <h1 className="max-w-5xl text-3xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-4xl">
               {title}
             </h1>
             {description ? (
-              <div
-                className={cx(
-                  "max-w-4xl text-sm leading-7 sm:text-[15px] sm:leading-8",
-                  dark ? "text-white/78" : "text-slate-600"
-                )}
-              >
+              <div className="max-w-4xl text-sm leading-7 text-slate-600 sm:text-[15px] sm:leading-8">
                 {description}
               </div>
             ) : null}
@@ -101,33 +63,52 @@ export function PageStat({
   value,
   hint,
   tone = "light",
+  layout = "stacked",
   className,
 }: {
   label: ReactNode;
   value: ReactNode;
   hint?: ReactNode;
   tone?: "light" | "dark";
+  layout?: "stacked" | "row";
   className?: string;
 }) {
-  const dark = tone === "dark";
+  if (layout === "row") {
+    return (
+      <div
+        className={cx(
+          "grid grid-cols-[minmax(0,1fr)_6rem] bg-white text-slate-900 sm:grid-cols-[minmax(0,1fr)_7rem]",
+          className
+        )}
+      >
+        <div className="min-w-0 grid content-center gap-2 px-5 py-4 sm:px-6">
+          <div className="inline-flex max-w-full items-center gap-2 self-start border border-slate-300 bg-slate-50 px-2.5 py-1">
+            <span className="h-1.5 w-1.5 shrink-0 bg-slate-900" />
+            <div className="min-w-0 truncate text-[13px] font-semibold uppercase tracking-[0.14em] text-slate-700">
+              {label}
+            </div>
+          </div>
+          {hint ? <div className="text-[13px] leading-5 text-slate-500">{hint}</div> : null}
+        </div>
+        <div className="flex items-center justify-center border-l border-slate-300 bg-slate-50 px-4 text-center text-4xl font-semibold tracking-[-0.055em] text-slate-950 tabular-nums">
+          {value}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
-      className={cx(
-        "rounded-[1.4rem] border p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]",
-        dark ? "border-white/10 bg-white/8 text-white" : "border-black/6 bg-white/82 text-slate-900",
-        className
-      )}
-    >
-      <div className={cx("text-[11px] font-semibold uppercase tracking-[0.2em]", dark ? "text-white/62" : "text-slate-500")}>
+        className={cx(
+          "border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f1f6fc)] px-4 py-4 text-slate-900 shadow-[0_12px_28px_rgba(15,23,42,0.04)]",
+          className
+        )}
+      >
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
         {label}
       </div>
       <div className="mt-3 text-3xl font-semibold tracking-[-0.05em]">{value}</div>
-      {hint ? (
-        <div className={cx("mt-2 text-sm", dark ? "text-white/65" : "text-slate-500")}>
-          {hint}
-        </div>
-      ) : null}
+      {hint ? <div className="mt-2 text-sm text-slate-500">{hint}</div> : null}
     </div>
   );
 }
@@ -142,7 +123,7 @@ export function SurfaceCard({
   return (
     <section
       className={cx(
-        "rounded-[1.8rem] border border-black/8 bg-white/88 p-6 shadow-[0_24px_72px_rgba(15,23,42,0.08)] backdrop-blur-sm",
+        "border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,250,255,0.97))] p-6 shadow-[0_16px_36px_rgba(15,23,42,0.045)]",
         className
       )}
     >
@@ -163,12 +144,12 @@ export function InsetCard({
   return (
     <div
       className={cx(
-        "rounded-[1.45rem] border p-4",
+        "border p-4",
         tone === "white"
-          ? "border-black/6 bg-white"
+          ? "border-slate-200 bg-white"
           : tone === "tint"
-            ? "border-amber-200/70 bg-[linear-gradient(180deg,_rgba(255,251,235,0.9),_rgba(255,255,255,0.96))]"
-            : "border-black/5 bg-[linear-gradient(180deg,_rgba(248,250,252,0.92),_rgba(241,245,249,0.84))]",
+            ? "border-sky-200 bg-sky-50"
+            : "border-slate-200 bg-[#f4f8fd]",
         className
       )}
     >
@@ -210,8 +191,8 @@ export function EmptyState({
 }) {
   return (
     <div
-      className={cx(
-        "grid gap-3 rounded-[1.8rem] border border-dashed border-black/12 bg-[linear-gradient(180deg,_rgba(255,255,255,0.74),_rgba(248,250,252,0.82))] p-8 text-center",
+        className={cx(
+        "grid gap-3 border border-dashed border-slate-300 bg-[linear-gradient(180deg,#f8fbff,#eef4fb)] p-8 text-center",
         className
       )}
     >
@@ -225,21 +206,21 @@ export function EmptyState({
 export function actionButtonClass(tone: "primary" | "secondary" | "ghost" | "danger" | "success" = "primary") {
   switch (tone) {
     case "secondary":
-      return "rounded-full border border-black/10 bg-white/90 px-4 py-2.5 text-sm font-medium text-slate-800 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5";
+      return "inline-flex items-center justify-center border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-slate-400 hover:bg-[#f3f7fd]";
     case "ghost":
-      return "rounded-full border border-black/8 bg-slate-100/80 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5";
+      return "inline-flex items-center justify-center border border-slate-300 bg-[#f3f7fd] px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-[#e9f0fb]";
     case "danger":
-      return "rounded-full bg-red-700 px-4 py-2.5 text-sm font-medium text-white !text-white shadow-[0_12px_30px_rgba(185,28,28,0.22)] transition hover:-translate-y-0.5 hover:!text-white";
+      return "inline-flex items-center justify-center border border-red-700 bg-red-700 px-4 py-3 text-sm font-medium text-white !text-white transition hover:bg-red-800 hover:!text-white";
     case "success":
-      return "rounded-full bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white !text-white shadow-[0_12px_30px_rgba(4,120,87,0.2)] transition hover:-translate-y-0.5 hover:!text-white";
+      return "inline-flex items-center justify-center border border-emerald-700 bg-emerald-700 px-4 py-3 text-sm font-medium text-white !text-white transition hover:bg-emerald-800 hover:!text-white";
     default:
-      return "rounded-full bg-slate-950 px-4 py-2.5 text-sm font-medium text-white !text-white shadow-[0_14px_34px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:!text-white";
+      return "inline-flex items-center justify-center border border-[#11284e] bg-[#11284e] px-4 py-3 text-sm font-medium text-white !text-white transition hover:bg-[#0d1f3b] hover:!text-white";
   }
 }
 
 export function fieldClass(kind: "input" | "textarea" = "input") {
   return cx(
-    "w-full rounded-[1.15rem] border border-black/10 bg-white/92 px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70",
+    "w-full border border-slate-300 bg-[#fbfdff] px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#244980] focus:bg-white",
     kind === "textarea" ? "min-h-28 py-3" : "py-3"
   );
 }

@@ -138,6 +138,12 @@ export interface ParsedDetailedFinding {
   rounds: ParsedDetailedFindingRound[];
 }
 
+interface DetailedFindingMatch {
+  findingKey: string;
+  reportSkillId?: string | null;
+  model?: string | null;
+}
+
 interface SanitizedTextResult {
   text: string;
   flags: string[];
@@ -152,7 +158,7 @@ const HIDDEN_SECTIONS = [
   "skill.skill_zip",
 ];
 
-const DETAIL_TEXT_MAX_LENGTH = 20_000;
+const DETAIL_TEXT_MAX_LENGTH = Number.POSITIVE_INFINITY;
 
 const REDACTION_RULES = [
   {
@@ -214,7 +220,33 @@ function ensureRecord(value: unknown) {
 }
 
 function compactText(value: unknown) {
-  return ensureString(value).replace(/\s+/g, " ").trim();
+  return cleanText(ensureString(value)).replace(/\s+/g, " ").trim();
+}
+
+function cleanText(value: string) {
+  const withoutNullBytes = value.replace(/\u0000/g, "").replace(/\\u0000/gi, "");
+  let cleaned = "";
+
+  for (let index = 0; index < withoutNullBytes.length; index += 1) {
+    const code = withoutNullBytes.charCodeAt(index);
+
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const nextCode = withoutNullBytes.charCodeAt(index + 1);
+      if (nextCode >= 0xdc00 && nextCode <= 0xdfff) {
+        cleaned += withoutNullBytes[index] + withoutNullBytes[index + 1];
+        index += 1;
+      }
+      continue;
+    }
+
+    if (code >= 0xdc00 && code <= 0xdfff) {
+      continue;
+    }
+
+    cleaned += withoutNullBytes[index];
+  }
+
+  return cleaned;
 }
 
 function readModelName(value: unknown) {
@@ -250,11 +282,11 @@ function extractConfiguredStageModels(
 }
 
 function summarizeText(value: string, maxLength: number) {
-  const normalized = value.replace(/\s+/g, " ").trim();
+  const normalized = cleanText(value).replace(/\s+/g, " ").trim();
   if (!normalized) {
     return "";
   }
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3).trimEnd()}...` : normalized;
+  return normalized.length > maxLength ? `${cleanText(normalized.slice(0, maxLength - 3).trimEnd())}...` : normalized;
 }
 
 function mergeReplacements(
@@ -266,10 +298,27 @@ function mergeReplacements(
   }
 }
 
+function redactNamedSecrets(
+  value: string,
+  flags: Set<string>,
+  replacements: Record<string, number>
+) {
+  return value.replace(
+    /((?:["']?)(?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|token|secret|password)(?:["']?)\s*[:=]\s*["'])([^"',\s}]+)/gi,
+    (_match, prefix: string) => {
+      flags.add("possible secret or credential leakage");
+      replacements.secret = (replacements.secret || 0) + 1;
+      return `${prefix}[SECRET]`;
+    }
+  );
+}
+
 function sanitizeText(value: unknown, maxLength: number): SanitizedTextResult {
-  let text = ensureString(value);
+  let text = cleanText(ensureString(value));
   const flags = new Set<string>();
   const replacements: Record<string, number> = {};
+
+  text = redactNamedSecrets(text, flags, replacements);
 
   for (const rule of REDACTION_RULES) {
     text = text.replace(rule.pattern, () => {
@@ -290,9 +339,11 @@ function sanitizeTextDetailed(
   value: unknown,
   maxLength = DETAIL_TEXT_MAX_LENGTH
 ): SanitizedTextResult {
-  let text = ensureString(value);
+  let text = cleanText(ensureString(value));
   const flags = new Set<string>();
   const replacements: Record<string, number> = {};
+
+  text = redactNamedSecrets(text, flags, replacements);
 
   for (const rule of REDACTION_RULES) {
     text = text.replace(rule.pattern, () => {
@@ -307,7 +358,7 @@ function sanitizeTextDetailed(
   return {
     text:
       normalized.length > maxLength
-        ? `${normalized.slice(0, maxLength - 3).trimEnd()}...`
+        ? `${cleanText(normalized.slice(0, maxLength - 3).trimEnd())}...`
         : normalized,
     flags: [...flags],
     replacements,
@@ -593,12 +644,13 @@ function parseRunsOrganizeBundle(zip: AdmZip): ParsedReportBundle {
 
   for (const analyzeEntry of analyzeEntries) {
     const segments = analyzeEntry.entryName.split("/");
-    if (segments.length < 4) {
+    if (segments.length < 3) {
       continue;
     }
 
-    const [, modelGroup, skillId] = segments;
-    const basePath = `${segments[0]}/${modelGroup}/${skillId}`;
+    const modelGroup = segments[segments.length - 3];
+    const skillId = segments[segments.length - 2];
+    const basePath = segments.slice(0, -1).join("/");
     const analyzePath = analyzeEntry.entryName;
     const globalReportPath = `${basePath}/${skillId}_global_report.json`;
     const modelPath = `${basePath}/model.json`;
@@ -1034,9 +1086,32 @@ export function parseReportBundle(buffer: Buffer): ParsedReportBundle {
   };
 }
 
+function matchesDetailedFinding(
+  match: DetailedFindingMatch,
+  candidate: { findingKey?: string; reportSkillId?: string; model?: string }
+) {
+  const normalizedFindingKey = compactText(match.findingKey);
+  const normalizedSkillId = compactText(match.reportSkillId);
+  const normalizedModel = compactText(match.model);
+
+  if (compactText(candidate.findingKey) !== normalizedFindingKey) {
+    return false;
+  }
+
+  if (normalizedSkillId && compactText(candidate.reportSkillId) !== normalizedSkillId) {
+    return false;
+  }
+
+  if (normalizedModel && compactText(candidate.model) !== normalizedModel) {
+    return false;
+  }
+
+  return true;
+}
+
 function parseDetailedFindingFromRunsOrganize(
   zip: AdmZip,
-  normalizedFindingKey: string
+  match: DetailedFindingMatch
 ): ParsedDetailedFinding | null {
   const analyzeEntries = zip
     .getEntries()
@@ -1044,12 +1119,13 @@ function parseDetailedFindingFromRunsOrganize(
 
   for (const analyzeEntry of analyzeEntries) {
     const segments = analyzeEntry.entryName.split("/");
-    if (segments.length < 4) {
+    if (segments.length < 3) {
       continue;
     }
 
-    const [, modelGroup, skillId] = segments;
-    const basePath = `${segments[0]}/${modelGroup}/${skillId}`;
+    const modelGroup = segments[segments.length - 3];
+    const skillId = segments[segments.length - 2];
+    const basePath = segments.slice(0, -1).join("/");
     const analyze = readJsonEntry(zip, analyzeEntry.entryName);
     const globalReportPath = `${basePath}/${skillId}_global_report.json`;
     const modelPath = `${basePath}/model.json`;
@@ -1061,12 +1137,19 @@ function parseDetailedFindingFromRunsOrganize(
       compactText(ensureRecord(modelConfig.attacker).model) ||
       compactText(modelGroup) ||
       undefined;
+    const resolvedSkillId = compactText(analyze.skillname) || skillId;
     const stageModels = extractConfiguredStageModels(modelConfig, simulatorModel);
 
     for (const result of ensureArray<Record<string, unknown>>(analyze.results)) {
       const surfaceId = compactText(result.id);
 
-      if (surfaceId !== normalizedFindingKey) {
+      if (
+        !matchesDetailedFinding(match, {
+          findingKey: surfaceId,
+          reportSkillId: resolvedSkillId,
+          model: simulatorModel,
+        })
+      ) {
         continue;
       }
 
@@ -1124,7 +1207,7 @@ function parseDetailedFindingFromRunsOrganize(
       });
 
       return {
-        reportSkillId: compactText(analyze.skillname) || skillId,
+        reportSkillId: resolvedSkillId,
         harmType:
           compactText(summary.final_risk_type) ||
           compactText(result.risk_type) ||
@@ -1146,7 +1229,7 @@ function parseDetailedFindingFromRunsOrganize(
 
 function parseDetailedFindingFromStandardizedBundle(
   zip: AdmZip,
-  normalizedFindingKey: string
+  match: DetailedFindingMatch
 ): ParsedDetailedFinding | null {
   const parsedIndex = readJsonEntry(zip, "standardized_reports/index.json");
   const reportEntries = ensureArray<Record<string, unknown>>(parsedIndex.reports);
@@ -1159,17 +1242,24 @@ function parseDetailedFindingFromStandardizedBundle(
 
     for (const finding of ensureArray<Record<string, unknown>>(reportJson.findings)) {
       const findingId = compactText(finding.finding_id);
+      const trajectory = ensureRecord(finding.agent_trajectory);
+      const observations = ensureRecord(trajectory.execution_observations);
+      const resolvedModel = compactText(observations.model) || undefined;
 
-      if (findingId !== normalizedFindingKey) {
+      if (
+        !matchesDetailedFinding(match, {
+          findingKey: findingId,
+          reportSkillId,
+          model: resolvedModel,
+        })
+      ) {
         continue;
       }
 
-      const trajectory = ensureRecord(finding.agent_trajectory);
-      const observations = ensureRecord(trajectory.execution_observations);
       const judge = ensureRecord(finding.judge);
       const stageModels = extractConfiguredStageModels(
         {},
-        compactText(observations.model) || undefined
+        resolvedModel
       );
 
       return {
@@ -1178,7 +1268,7 @@ function parseDetailedFindingFromStandardizedBundle(
         harmType: compactText(finding.harm_type) || "unknown",
         vulnerabilitySurface: compactText(finding.vulnerability_surface) || "unknown",
         provider: compactText(observations.provider) || undefined,
-        model: compactText(observations.model) || undefined,
+        model: resolvedModel,
         verdict: compactText(judge.verdict) || undefined,
         reasonCode: compactText(judge.reason_code) || undefined,
         confidence: toNumber(judge.confidence),
@@ -1213,9 +1303,9 @@ function parseDetailedFindingFromStandardizedBundle(
 
 export function parseDetailedFindingFromBundle(
   buffer: Buffer,
-  findingKey: string
+  match: DetailedFindingMatch
 ): ParsedDetailedFinding | null {
-  const normalizedFindingKey = compactText(findingKey);
+  const normalizedFindingKey = compactText(match.findingKey);
 
   if (!normalizedFindingKey) {
     return null;
@@ -1224,8 +1314,14 @@ export function parseDetailedFindingFromBundle(
   const zip = new AdmZip(buffer);
 
   if (!zip.getEntry("bundle_meta.json") || !zip.getEntry("standardized_reports/index.json")) {
-    return parseDetailedFindingFromRunsOrganize(zip, normalizedFindingKey);
+    return parseDetailedFindingFromRunsOrganize(zip, {
+      ...match,
+      findingKey: normalizedFindingKey,
+    });
   }
 
-  return parseDetailedFindingFromStandardizedBundle(zip, normalizedFindingKey);
+  return parseDetailedFindingFromStandardizedBundle(zip, {
+    ...match,
+    findingKey: normalizedFindingKey,
+  });
 }

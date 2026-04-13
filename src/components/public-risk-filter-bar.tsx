@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import type { Locale } from "@/lib/i18n";
 import { getPublicRiskCategoryLabel, PUBLIC_RISK_CATEGORIES } from "@/lib/public-risk-categories";
+import { formatSurfaceLevelLabel } from "@/lib/public-surface-level";
 
 function filterChipClass(isSelected: boolean, isMuted: boolean) {
   if (isSelected) {
@@ -16,12 +17,17 @@ function filterChipClass(isSelected: boolean, isMuted: boolean) {
   }`;
 }
 
-function filterLabelClass(isSelected: boolean, isMuted: boolean) {
+function filterLabelClass(locale: Locale, isSelected: boolean, isMuted: boolean) {
+  const sizeClass =
+    locale === "en"
+      ? "text-[12px] leading-5 tracking-normal whitespace-nowrap"
+      : "text-sm leading-6 tracking-normal";
+
   if (isSelected) {
-    return "text-sm font-semibold leading-6 tracking-[-0.01em] text-white !text-white";
+    return `${sizeClass} font-semibold text-white !text-white`;
   }
 
-  return `text-sm font-semibold leading-6 tracking-[-0.01em] ${
+  return `${sizeClass} font-semibold ${
     isMuted ? "text-slate-400" : "text-slate-800"
   }`;
 }
@@ -90,7 +96,7 @@ function renderFilterLink({
   const isMuted = count === 0 && !isSelected;
   const content = (
     <>
-      <div className={filterLabelClass(isSelected, isMuted)}>{value ? label : allLabel || label}</div>
+      <div className={filterLabelClass(locale, isSelected, isMuted)}>{value ? label : allLabel || label}</div>
       <span className={filterCountClass(isSelected, isMuted)}>{formatNumber(locale, count)}</span>
     </>
   );
@@ -224,21 +230,21 @@ export function PublicRiskFilterBar({
           </div>
           <div className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
             {locale === "zh"
-              ? `${formatNumber(locale, totalCount)} 条攻击轨迹`
-              : `${formatNumber(locale, totalCount)} attack traces`}
+              ? `${formatNumber(locale, totalCount)} 个攻击案例`
+              : `${formatNumber(locale, totalCount)} attack cases`}
           </div>
         </div>
 
-        <FilterSection title={locale === "zh" ? "攻击结果" : "Result"}>
+        <FilterSection title={locale === "zh" ? "攻击结果" : "Attack result"}>
           {renderFilterLink({
             locale,
             pathname,
             preservedQuery,
             paramName: "result",
             selectedValue: selectedResult,
-            label: locale === "zh" ? "全部结果" : "All results",
+            label: locale === "zh" ? "全部攻击结果" : "All attack results",
             count: allResultCount ?? totalCount,
-            allLabel: locale === "zh" ? "全部结果" : "All results",
+            allLabel: locale === "zh" ? "全部攻击结果" : "All attack results",
           })}
           {RESULT_OPTIONS.map((value) =>
             renderFilterLink({
@@ -255,16 +261,16 @@ export function PublicRiskFilterBar({
           )}
         </FilterSection>
 
-        <FilterSection title={locale === "zh" ? "风险等级" : "Risk level"}>
+        <FilterSection title={locale === "zh" ? "潜在漏洞等级" : "Potential severity"}>
           {renderFilterLink({
             locale,
             pathname,
             preservedQuery,
             paramName: "level",
             selectedValue: selectedLevel,
-            label: locale === "zh" ? "全部风险等级" : "All risk levels",
+            label: locale === "zh" ? "全部等级" : "All levels",
             count: allLevelCount ?? totalCount,
-            allLabel: locale === "zh" ? "全部风险等级" : "All risk levels",
+            allLabel: locale === "zh" ? "全部等级" : "All levels",
           })}
           {orderedLevels.map((level) =>
             renderFilterLink({
@@ -275,7 +281,7 @@ export function PublicRiskFilterBar({
               paramName: "level",
               selectedValue: selectedLevel,
               value: level,
-              label: level,
+              label: formatSurfaceLevelLabel(locale, level),
               count: levelCounts?.get(level) ?? 0,
             })
           )}
@@ -320,7 +326,7 @@ export function PublicRiskFilterBar({
         <div className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
           {locale === "zh"
             ? `${formatNumber(locale, totalCount)} 条轨迹`
-            : `${formatNumber(locale, totalCount)} trajectories`}
+            : `${formatNumber(locale, totalCount)} traces`}
         </div>
       </div>
 

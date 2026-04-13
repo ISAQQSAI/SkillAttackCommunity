@@ -48,6 +48,26 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function toPositiveInteger(value: unknown) {
+  const parsed = toNumber(value);
+  return parsed && parsed > 0 ? parsed : null;
+}
+
+function readDisplayFindingRoundCount(
+  finding: Record<string, unknown>,
+  dbFinding?: { judgeSummary?: unknown } | null
+) {
+  const payloadJudgeSummary = readJsonRecord(finding.judgeSummary);
+  const dbJudgeSummary = readJsonRecord(dbFinding?.judgeSummary);
+
+  return (
+    toPositiveInteger(dbJudgeSummary.rounds) ||
+    toPositiveInteger(payloadJudgeSummary.rounds) ||
+    toPositiveInteger(finding.roundCount) ||
+    (Array.isArray(finding.trajectoryTimeline) && finding.trajectoryTimeline.length ? 1 : 0)
+  );
+}
+
 function uniqueSorted(values: Iterable<string>) {
   return Array.from(new Set(Array.from(values).filter(Boolean))).sort((left, right) =>
     left.localeCompare(right)
@@ -79,16 +99,33 @@ function parseFrontmatterDescription(markdown: string) {
     return "";
   }
 
-  const descriptionLine = match[1]
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.toLowerCase().startsWith("description:"));
+  const lines = match[1].split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const descriptionMatch = lines[index]?.match(/^description:\s*(.*)$/i);
+    if (!descriptionMatch) {
+      continue;
+    }
 
-  if (!descriptionLine) {
-    return "";
+    const inlineValue = String(descriptionMatch[1] || "").trim();
+    if (/^[>|]-?$/.test(inlineValue)) {
+      const collected: string[] = [];
+      for (let nestedIndex = index + 1; nestedIndex < lines.length; nestedIndex += 1) {
+        const nextLine = lines[nestedIndex] || "";
+        if (!nextLine.trim()) {
+          continue;
+        }
+        if (!/^\s+/.test(nextLine)) {
+          break;
+        }
+        collected.push(nextLine.replace(/^\s+/, ""));
+      }
+      return compactText(collected.join(" "));
+    }
+
+    return compactText(stripWrappedQuotes(inlineValue));
   }
 
-  return compactText(stripWrappedQuotes(descriptionLine.replace(/^description:\s*/i, "")));
+  return "";
 }
 
 function summarizeValue(value: unknown, length = 320) {
@@ -744,6 +781,7 @@ const loadPublicCaseSkillLibrary = cache(async () => {
   for (const item of cases) {
     const payload = readJsonRecord(item.payload);
     const findings = readJsonList(payload.findings).map((entry) => readJsonRecord(entry));
+    const dbFindings = item.submission?.parsedBundle?.findings || [];
 
     for (const [index, finding] of findings.entries()) {
       const skillId = compactText(finding.reportSkillId);
@@ -754,6 +792,21 @@ const loadPublicCaseSkillLibrary = cache(async () => {
       const presentation = parseSkillPresentation(skillId);
       const agentModel = compactText(finding.model);
       const surfaceId = compactText(finding.findingKey) || `${skillId}-finding-${index + 1}`;
+      const dbFinding =
+        dbFindings.find((entry) => {
+          return (
+            compactText(entry.findingKey) === surfaceId &&
+            compactText(entry.reportSkillId) === skillId &&
+            compactText(entry.model) === agentModel
+          );
+        }) ||
+        dbFindings.find((entry) => {
+          return (
+            compactText(entry.findingKey) === surfaceId &&
+            compactText(entry.reportSkillId) === skillId
+          );
+        }) ||
+        dbFindings.find((entry) => compactText(entry.findingKey) === surfaceId);
       const surfaceTitle =
         compactText(finding.vulnerabilitySurface) ||
         compactText(finding.harmType) ||
@@ -774,7 +827,7 @@ const loadPublicCaseSkillLibrary = cache(async () => {
         surfaceLevel: compactText(finding.reasonCode) || "-",
         result: normalizeResult(finding.verdict),
         riskType: compactText(finding.harmType) || "-",
-        roundCount: Array.isArray(finding.trajectoryTimeline) ? finding.trajectoryTimeline.length : 0,
+        roundCount: readDisplayFindingRoundCount(finding, dbFinding),
         updatedAt: item.publishedAt,
         attackPrompt: compactText(finding.harmfulPromptPreview),
         latestAttackPrompt: compactText(finding.harmfulPromptPreview),

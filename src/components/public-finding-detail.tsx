@@ -156,7 +156,11 @@ async function buildSurfaceWithDetail({
     const buffer = await readSubmissionBundle(storageKey);
     const detailedFinding = parseDetailedFindingFromBundle(
       buffer,
-      String(finding.findingKey || "")
+      {
+        findingKey: String(finding.findingKey || ""),
+        reportSkillId: String(finding.reportSkillId || ""),
+        model: String(finding.model || ""),
+      }
     );
 
     if (!detailedFinding || !detailedFinding.rounds.length) {

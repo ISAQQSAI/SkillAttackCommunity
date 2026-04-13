@@ -18,7 +18,7 @@ const dictionaries = {
         "Attack Trace Library for Agent Skills — Documenting attack paths behind unsafe agent behaviors and publicly disclosed security cases",
       nav: {
         home: "Home",
-        skills: "Traces",
+        skills: "Cases",
         showcase: "Showcase",
         findings: "Findings",
         leaderboards: "Leaderboards",
@@ -316,7 +316,7 @@ const dictionaries = {
       tagline: "智能体技能攻击轨迹库——记录智能体不安全行为背后的攻击路径与公开披露的安全案例",
       nav: {
         home: "首页",
-        skills: "轨迹",
+        skills: "案例",
         showcase: "展示",
         findings: "案例",
         leaderboards: "排行榜",

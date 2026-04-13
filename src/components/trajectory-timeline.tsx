@@ -35,7 +35,7 @@ function labelForType(locale: Locale, type: string, tool?: string) {
   if (normalized === "tool_result") {
     return tool ? `Tool result · ${tool}` : "Tool result";
   }
-  return "Trajectory step";
+  return "Trace step";
 }
 
 function toneForStep(step: TrajectoryTimelineStep) {

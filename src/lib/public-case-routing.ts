@@ -10,6 +10,49 @@ function normalizeId(value: unknown) {
   return String(value || "").trim();
 }
 
+function firstMatchingFinding(
+  findings: Record<string, unknown>[],
+  findingKey: string,
+  options: { reportSkillId?: string | null; model?: string | null } = {}
+) {
+  const normalizedFindingKey = normalizeId(findingKey);
+  const normalizedSkillId = normalizeId(options.reportSkillId);
+  const normalizedModel = normalizeId(options.model);
+
+  const candidates = findings
+    .map((finding, index) => ({ finding, index }))
+    .filter(({ finding }) => normalizeId(finding.findingKey) === normalizedFindingKey);
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  const exactMatch = candidates.find(({ finding }) => {
+    return (
+      (!normalizedSkillId || normalizeId(finding.reportSkillId) === normalizedSkillId) &&
+      (!normalizedModel || normalizeId(finding.model) === normalizedModel)
+    );
+  });
+
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const skillMatch = normalizedSkillId
+    ? candidates.find(({ finding }) => normalizeId(finding.reportSkillId) === normalizedSkillId)
+    : null;
+
+  if (skillMatch) {
+    return skillMatch;
+  }
+
+  const modelMatch = normalizedModel
+    ? candidates.find(({ finding }) => normalizeId(finding.model) === normalizedModel)
+    : null;
+
+  return modelMatch || candidates[0];
+}
+
 export function getPublicCaseSkillIds(payload: unknown) {
   const record = readJsonRecord(payload);
   const findings = readJsonList(record.findings);
@@ -47,33 +90,44 @@ export function getPrimaryPublicCaseSkillId(payload: unknown) {
   return reportSkillId || null;
 }
 
-export function getPrimaryPublicFindingKey(payload: unknown) {
-  const record = readJsonRecord(payload);
-  const findings = readJsonList(record.findings);
-  const firstFindingKey = normalizeId(readJsonRecord(findings[0]).findingKey);
-  return firstFindingKey || null;
-}
-
-export function findPublicCaseFinding(payload: unknown, findingKey: string) {
+export function getPrimaryPublicFindingTarget(payload: unknown) {
   const record = readJsonRecord(payload);
   const findings = readJsonList(record.findings).map((item) => readJsonRecord(item));
-  const normalizedFindingKey = normalizeId(findingKey);
+  const firstFinding = findings[0];
 
-  if (!normalizedFindingKey) {
+  if (!firstFinding) {
     return null;
   }
 
-  const index = findings.findIndex(
-    (item) => normalizeId(item.findingKey) === normalizedFindingKey
-  );
+  const findingKey = normalizeId(firstFinding.findingKey);
 
-  if (index < 0) {
+  if (!findingKey) {
     return null;
   }
 
   return {
-    finding: findings[index],
-    index,
+    findingKey,
+    reportSkillId: normalizeId(firstFinding.reportSkillId) || null,
+    model: normalizeId(firstFinding.model) || null,
+  };
+}
+
+export function findPublicCaseFinding(
+  payload: unknown,
+  findingKey: string,
+  options: { reportSkillId?: string | null; model?: string | null } = {}
+) {
+  const record = readJsonRecord(payload);
+  const findings = readJsonList(record.findings).map((item) => readJsonRecord(item));
+  const matched = firstMatchingFinding(findings, findingKey, options);
+
+  if (!matched) {
+    return null;
+  }
+
+  return {
+    finding: matched.finding,
+    index: matched.index,
   };
 }
 
@@ -91,22 +145,42 @@ export function getPublicCasePath({
 export function getPublicFindingPath({
   slug,
   findingKey,
+  reportSkillId,
+  model,
   payload,
   preferredSkillId,
 }: {
   slug: string;
   findingKey: string;
+  reportSkillId?: string | null;
+  model?: string | null;
   payload?: unknown;
   preferredSkillId?: string | null;
 }) {
   const normalizedSlug = encodeURIComponent(slug);
   const normalizedFindingKey = encodeURIComponent(normalizeId(findingKey));
+  const normalizedSkillId = normalizeId(reportSkillId || preferredSkillId);
+  const normalizedModel = normalizeId(model);
 
   if (!normalizedFindingKey) {
     return getPublicCasePath({ slug, payload, preferredSkillId });
   }
 
-  return `/vulnerabilities/${normalizedSlug}/${normalizedFindingKey}`;
+  const query = new URLSearchParams();
+
+  if (normalizedSkillId) {
+    query.set("skill", normalizedSkillId);
+  }
+
+  if (normalizedModel) {
+    query.set("model", normalizedModel);
+  }
+
+  const suffix = query.toString();
+
+  return suffix
+    ? `/vulnerabilities/${normalizedSlug}/${normalizedFindingKey}?${suffix}`
+    : `/vulnerabilities/${normalizedSlug}/${normalizedFindingKey}`;
 }
 
 export { readJsonList, readJsonRecord };

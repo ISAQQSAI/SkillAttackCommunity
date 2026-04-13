@@ -182,8 +182,16 @@ export function PublicCaseDetail({
       ) : null}
 
       <section className="grid gap-4">
-        {findings.map((finding) => (
-          <SurfaceCard key={String(finding.findingKey)} className="grid gap-4">
+        {findings.map((finding, index) => (
+          <SurfaceCard
+            key={[
+              String(finding.findingKey || `finding-${index + 1}`),
+              String(finding.reportSkillId || ""),
+              String(finding.model || ""),
+              String(index),
+            ].join(":")}
+            className="grid gap-4"
+          >
             {(() => {
               const skillId = String(finding.reportSkillId || "").trim();
               const target = parseSkillPresentation(skillId);
@@ -232,7 +240,7 @@ export function PublicCaseDetail({
               </InsetCard>
               <InsetCard>
                 <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                  {locale === "zh" ? "轨迹步骤" : "Trajectory steps"}
+                  {locale === "zh" ? "轨迹步骤" : "Trace steps"}
                 </div>
                 <div className="mt-2 text-slate-800">
                   {readTrajectorySteps(finding.trajectoryTimeline).length}
@@ -250,6 +258,8 @@ export function PublicCaseDetail({
                 href={getPublicFindingPath({
                   slug: result.slug,
                   findingKey: String(finding.findingKey || ""),
+                  reportSkillId: skillId,
+                  model: String(finding.model || ""),
                   payload: result.payload,
                   preferredSkillId: skillId,
                 })}

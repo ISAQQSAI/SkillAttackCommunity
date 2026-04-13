@@ -9,6 +9,8 @@ import {
   SurfaceCard,
 } from "@/components/page-chrome";
 import type { Locale } from "@/lib/i18n";
+import { shortPublicModelName } from "@/lib/public-model-name";
+import { formatSurfaceLevelLabel } from "@/lib/public-surface-level";
 import { cleanPromptForDisplay, compactDisplayText } from "@/lib/prompt-display";
 import type {
   PublicSimulationStep,
@@ -72,6 +74,10 @@ function resultBadgeClass(result: string) {
     default:
       return "border border-slate-300 bg-slate-100 text-slate-700";
   }
+}
+
+function isSuccessfulResult(result: string) {
+  return compactDisplayText(result).toLowerCase() === "success";
 }
 
 function judgeTone(result: string): AuditTone {
@@ -257,30 +263,8 @@ function formatTimestamp(locale: Locale, value: Date | null) {
   }).format(value);
 }
 
-function shortModelName(value?: string) {
-  const normalized = compactDisplayText(value || "");
-  if (!normalized) {
-    return "";
-  }
-
-  const matched = normalized.match(
-    /(gpt-[a-z0-9._-]+|gemini-[a-z0-9._-]+|glm-[a-z0-9._-]+|qwen[a-z0-9._-]*|kimi-[a-z0-9._-]+|doubao-[a-z0-9._-]+|minimax-[a-z0-9._-]+|hunyuan-[a-z0-9._-]+|claude-[a-z0-9._-]+|deepseek-[a-z0-9._-]+|llama[a-z0-9._-]*)/i
-  );
-
-  if (matched) {
-    return matched[1];
-  }
-
-  const slashSegments = normalized.split("/").map((segment) => segment.trim()).filter(Boolean);
-  if (slashSegments.length > 1) {
-    return slashSegments[slashSegments.length - 1];
-  }
-
-  return normalized;
-}
-
 function formatStageModelLabel(locale: Locale, value?: string) {
-  const model = shortModelName(value);
+  const model = shortPublicModelName(value);
   if (!model) {
     return undefined;
   }
@@ -322,6 +306,30 @@ export function PublicSurfaceDetail({
   locale: Locale;
   surface: PublicSurfaceRecord;
 }) {
+  const headerMetaEntries = [
+    {
+      label: "SKILL",
+      value: surface.skillDisplayName || "-",
+    },
+    {
+      label: locale === "zh" ? "风险类型" : "Risk Type",
+      value: surface.riskType || "-",
+    },
+    {
+      label: locale === "zh" ? "AGENT模型" : "Agent Model",
+      value: shortPublicModelName(surface.agentModel) || compactDisplayText(surface.agentModel) || "-",
+    },
+  ];
+  const orderedRounds = [...surface.rounds].sort((left, right) => {
+    const leftRoundId = Number(left.roundId) || 0;
+    const rightRoundId = Number(right.roundId) || 0;
+    return rightRoundId - leftRoundId || right.id.localeCompare(left.id);
+  });
+  const latestSuccessfulRoundId =
+    [...surface.rounds]
+      .filter((round) => isSuccessfulResult(round.result))
+      .sort((left, right) => (Number(right.roundId) || 0) - (Number(left.roundId) || 0))[0]?.id ||
+    null;
   const copy =
     locale === "zh"
       ? {
@@ -342,7 +350,8 @@ export function PublicSurfaceDetail({
           suggestionTitle: "可执行建议",
           eventsSummary: (total: number, simulationSteps: number) =>
             `共 ${total} 条记录，其中 ${simulationSteps} 条来自模拟步骤。`,
-          resultPrefix: "结果",
+          resultPrefix: "攻击结果",
+          levelPrefix: "潜在漏洞等级",
         }
       : {
           roundLabel: "Round",
@@ -362,7 +371,8 @@ export function PublicSurfaceDetail({
           suggestionTitle: "Actionable follow-up",
           eventsSummary: (total: number, simulationSteps: number) =>
             `${total} logged events, including ${simulationSteps} simulation steps.`,
-          resultPrefix: "Result",
+          resultPrefix: "Attack result",
+          levelPrefix: "Potential severity",
         };
 
   return (
@@ -388,6 +398,7 @@ export function PublicSurfaceDetail({
         showPrompt={false}
         titleSize="detail"
         showMeta={false}
+        headerMetaEntries={headerMetaEntries}
       />
 
       <SurfaceCard>
@@ -397,8 +408,9 @@ export function PublicSurfaceDetail({
         />
 
         <div className="mt-5 grid gap-5">
-          {surface.rounds.map((round) => {
+          {orderedRounds.map((round) => {
             const normalizedResult = formatResultLabel(locale, round.result);
+            const localizedSurfaceLevel = formatSurfaceLevelLabel(locale, round.surfaceLevel);
             const auditRows = [
               {
                 id: `${round.id}-prompt`,
@@ -482,7 +494,7 @@ export function PublicSurfaceDetail({
             return (
               <details
                 key={round.id}
-                open
+                open={round.id === latestSuccessfulRoundId}
                 className="group overflow-hidden border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,250,255,0.96))]"
               >
                 <summary className="grid cursor-pointer gap-3 bg-[linear-gradient(180deg,#fbfdff,#f4f8fd)] px-5 py-4 [&::-webkit-details-marker]:hidden md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
@@ -497,7 +509,7 @@ export function PublicSurfaceDetail({
                         {`${copy.resultPrefix}: ${normalizedResult}`}
                       </span>
                       <span className={`px-3 py-1 font-semibold ${surfaceLevelBadgeClass(round.surfaceLevel)}`}>
-                        {round.surfaceLevel || "-"}
+                        {`${copy.levelPrefix}: ${localizedSurfaceLevel}`}
                       </span>
                       {round.riskType ? (
                         <span className="border border-slate-200 bg-white px-3 py-1 font-medium text-slate-600">

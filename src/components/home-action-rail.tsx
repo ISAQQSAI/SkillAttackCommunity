@@ -36,7 +36,7 @@ export function HomeActionRail({
     locale === "zh"
       ? {
           uploadEyebrow: "上传入口",
-          uploadTitle: "提交攻击轨迹",
+          uploadTitle: "提交攻击案例",
           uploadBody:
             "支持两种提交方式：通过命令行脚本自动上传，或在本页手动上传 zip 文件。",
           chooseFile: "选择 zip 文件",
@@ -61,7 +61,7 @@ export function HomeActionRail({
         }
       : {
           uploadEyebrow: "Upload entry",
-          uploadTitle: "Submit an attack trace",
+          uploadTitle: "Submit an attack case",
           uploadBody:
             "Two submission paths are supported: upload automatically from the command line, or upload a zip file manually on this page.",
           chooseFile: "Choose zip file",

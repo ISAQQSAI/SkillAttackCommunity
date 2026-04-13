@@ -1,5 +1,7 @@
+import AdmZip from "adm-zip";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { promises as fs } from "node:fs";
 
 import { PublicVulnerabilityCard } from "@/components/public-vulnerability-card";
 import {
@@ -7,7 +9,11 @@ import {
   SectionHeading,
   SurfaceCard,
 } from "@/components/page-chrome";
+import { shortPublicModelName } from "@/lib/public-model-name";
+import { formatSurfaceLevelLabel } from "@/lib/public-surface-level";
+import { getSkillVaultSkillArchive } from "@/lib/skill-vault";
 import { getLocale } from "@/lib/server/locale";
+import { getPublicSkillArchiveDownload } from "@/lib/server/report-submissions";
 import { getPublicSkillById } from "@/lib/server/public-skills";
 
 function formatNumber(locale: string, value: number, suffix?: string) {
@@ -18,6 +24,117 @@ function formatNumber(locale: string, value: number, suffix?: string) {
   return `${formatted}${suffix || ""}`;
 }
 
+function compactText(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function stripWrappedQuotes(value: string) {
+  const trimmed = String(value || "").trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function parseSkillMarkdownIntro(markdown: string) {
+  const source = String(markdown || "").replace(/\r\n/g, "\n");
+  const frontmatter = source.match(/^---\s*\n([\s\S]*?)\n---/);
+
+  if (frontmatter) {
+    const lines = frontmatter[1].split("\n");
+    for (let index = 0; index < lines.length; index += 1) {
+      const match = lines[index]?.match(/^description:\s*(.*)$/i);
+      if (!match) {
+        continue;
+      }
+
+      const inlineValue = String(match[1] || "").trim();
+      if (/^[>|]-?$/.test(inlineValue)) {
+        const collected: string[] = [];
+        for (let nestedIndex = index + 1; nestedIndex < lines.length; nestedIndex += 1) {
+          const nextLine = lines[nestedIndex] || "";
+          if (!nextLine.trim()) {
+            continue;
+          }
+          if (!/^\s+/.test(nextLine)) {
+            break;
+          }
+          collected.push(nextLine.replace(/^\s+/, ""));
+        }
+        const description = compactText(collected.join(" "));
+        if (description) {
+          return description;
+        }
+      } else {
+        const description = compactText(stripWrappedQuotes(inlineValue));
+        if (description) {
+          return description;
+        }
+      }
+    }
+  }
+
+  const body = source
+    .replace(/^---\s*\n[\s\S]*?\n---\s*/i, "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .split(/\n\s*\n/);
+
+  for (const paragraph of body) {
+    const normalized = compactText(paragraph.replace(/^#+\s*/gm, ""));
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return "";
+}
+
+async function readSkillIntroFromArchivePath(archivePath?: string | null) {
+  if (!archivePath) {
+    return "";
+  }
+
+  try {
+    const buffer = await fs.readFile(archivePath);
+    const zip = new AdmZip(buffer);
+    const skillEntry = zip
+      .getEntries()
+      .find((entry) => /(^|\/)skill\.md$/i.test(entry.entryName));
+
+    if (!skillEntry) {
+      return "";
+    }
+
+    return parseSkillMarkdownIntro(skillEntry.getData().toString("utf-8"));
+  } catch {
+    return "";
+  }
+}
+
+async function readSkillIntroFromArchiveBuffer(buffer?: Buffer | null) {
+  if (!buffer) {
+    return "";
+  }
+
+  try {
+    const zip = new AdmZip(buffer);
+    const skillEntry = zip
+      .getEntries()
+      .find((entry) => /(^|\/)skill\.md$/i.test(entry.entryName));
+
+    if (!skillEntry) {
+      return "";
+    }
+
+    return parseSkillMarkdownIntro(skillEntry.getData().toString("utf-8"));
+  } catch {
+    return "";
+  }
+}
+
 export default async function SkillDetailPage({
   params,
 }: {
@@ -26,17 +143,34 @@ export default async function SkillDetailPage({
   const locale = await getLocale();
   const { skillId: rawSkillId } = await params;
   const skillId = decodeURIComponent(rawSkillId);
-  const record = await getPublicSkillById(skillId);
+  const [record, skillArchive] = await Promise.all([
+    getPublicSkillById(skillId),
+    getSkillVaultSkillArchive(skillId),
+  ]);
 
   if (!record) {
     notFound();
   }
 
-  const skillDescriptionText =
-    record.skillDescription ||
-    (locale === "zh"
-      ? "未在解压后的 SKILL.md 中找到 description。"
-      : "No description was found in the extracted SKILL.md.");
+  const hasPublishedCaseSurface = record.surfaces.some((surface) => !surface.slug.includes("__"));
+  const skillArchiveUrl = skillArchive
+    ? `/api/skill-vault/skills/${encodeURIComponent(skillId)}/skill`
+    : hasPublishedCaseSurface
+      ? `/api/public/skills/${encodeURIComponent(skillId)}/skill`
+      : null;
+  const publicSkillArchive = !skillArchiveUrl || skillArchive ? null : await getPublicSkillArchiveDownload(skillId);
+  const fallbackSkillIntro =
+    record.skillDescription && record.skillDescription !== record.representativeSummary
+      ? record.skillDescription
+      : "";
+  const skillIntro =
+    (await readSkillIntroFromArchivePath(skillArchive?.path)) ||
+    (await readSkillIntroFromArchiveBuffer(publicSkillArchive?.buffer)) ||
+    fallbackSkillIntro;
+  const displayAgentModels = Array.from(
+    new Set(record.agentModels.map((model) => shortPublicModelName(model)).filter(Boolean))
+  );
+
   const copy =
     locale === "zh"
       ? {
@@ -44,22 +178,36 @@ export default async function SkillDetailPage({
           overview: "Skill 概览",
           owner: "归属方",
           skillId: "Skill ID",
-          description: "SKILL.md 描述",
+          intro: "Description",
+          introEmpty: "skill.zip 中未提供 description。",
           coverage: "覆盖情况",
           riskTypes: "风险类型",
-          surfaceLevels: "轨迹等级",
+          surfaceLevels: "潜在漏洞等级",
           agentModels: "Agent 模型",
+          downloadSkill: "下载 skill.zip",
+          downloadLabel: "Skill 文件",
+          downloadHint: "获取该 skill 的原始压缩包，用于本地查看与复现。",
+          downloadNow: "立即下载",
+          downloadUnavailable: "skill.zip 暂不可下载",
+          coverageSummary: "基于当前公开轨迹统计。",
         }
       : {
           badge: "Skill detail",
           overview: "Skill overview",
           owner: "Owner",
           skillId: "Skill ID",
-          description: "SKILL.md description",
+          intro: "Description",
+          introEmpty: "No description found in skill.zip.",
           coverage: "Coverage",
           riskTypes: "Risk types",
-          surfaceLevels: "Trace levels",
+          surfaceLevels: "Potential severity",
           agentModels: "Agent models",
+          downloadSkill: "Download skill.zip",
+          downloadLabel: "Skill file",
+          downloadHint: "Get the original skill archive for local inspection and reproduction.",
+          downloadNow: "Download now",
+          downloadUnavailable: "skill.zip is not available",
+          coverageSummary: "Based on current public traces.",
         };
 
   return (
@@ -96,9 +244,9 @@ export default async function SkillDetailPage({
 
           {[
             {
-              label: locale === "zh" ? "轨迹" : "Trajectories",
+              label: locale === "zh" ? "轨迹" : "Traces",
               value: formatNumber(locale, record.surfaceCount),
-              hint: locale === "zh" ? "当前公开轨迹条目" : "public trajectory entries",
+              hint: locale === "zh" ? "当前公开轨迹条目" : "public trace entries",
             },
             {
               label: locale === "zh" ? "风险类型" : "Risk Types",
@@ -129,19 +277,13 @@ export default async function SkillDetailPage({
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
-        <SurfaceCard className="grid gap-4">
-          <SectionHeading
-            title={copy.overview}
-            description={
-              locale === "zh"
-                ? "这里展示 skill 的基础标识信息，以及解压后 SKILL.md 里的 description。"
-                : "This section shows the basic skill identifiers and the description parsed from the extracted SKILL.md."
-            }
-          />
-          <div className="grid gap-4">
-            <div className="grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-2">
-              <div className="grid gap-1 bg-white px-4 py-3">
+      <SurfaceCard className="grid gap-5">
+        <SectionHeading title={copy.overview} />
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:items-start">
+            <div className="grid gap-3">
+              <div className="grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-2">
+                <div className="grid gap-1 bg-white px-4 py-3">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                   {copy.owner}
                 </div>
@@ -152,72 +294,110 @@ export default async function SkillDetailPage({
                   {copy.skillId}
                 </div>
                 <div className="break-all text-sm font-medium text-slate-900">{record.skillId}</div>
+                </div>
               </div>
+
+              <div className="grid gap-2 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4 py-3.5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  {copy.intro}
+                </div>
+                <div className="text-sm leading-7 text-slate-700">
+                  {skillIntro || copy.introEmpty}
+                </div>
+              </div>
+
+            {skillArchiveUrl ? (
+              <a
+                href={skillArchiveUrl}
+                download
+                className="group relative overflow-hidden border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f5f9ff_48%,#edf4ff_100%)] px-6 py-6 text-slate-950 transition hover:border-slate-300 hover:shadow-[0_16px_32px_rgba(15,23,42,0.08)]"
+              >
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-40 bg-[radial-gradient(circle_at_top_right,rgba(17,40,78,0.10),transparent_72%)]" />
+                <div className="relative grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <div className="grid gap-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      {copy.downloadLabel}
+                    </div>
+                    <div className="text-[1.85rem] font-semibold tracking-[-0.05em] text-slate-950">
+                      {copy.downloadSkill}
+                    </div>
+                    <div className="max-w-xl text-sm leading-6 text-slate-600">
+                      {copy.downloadHint}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 sm:justify-end">
+                    <span className="border border-slate-300 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                      ZIP
+                    </span>
+                    <span className="inline-flex items-center justify-center border border-[#11284e] bg-[#11284e] px-4 py-2.5 text-sm font-medium text-white transition group-hover:bg-[#0d1f3b]">
+                      {copy.downloadNow}
+                    </span>
+                  </div>
+                </div>
+              </a>
+            ) : (
+              <div className="grid min-h-[144px] place-items-center border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] px-6 py-6 text-center">
+                <div className="grid gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    {copy.downloadLabel}
+                  </div>
+                  <div className="text-xl font-semibold text-slate-500">{copy.downloadUnavailable}</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-3 xl:border-l xl:border-slate-200 xl:pl-5">
+            <div className="grid gap-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                {copy.coverage}
+              </div>
+              <div className="text-sm leading-6 text-slate-600">{copy.coverageSummary}</div>
             </div>
 
-            <div className="border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-5 py-5">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                {copy.description}
+            <div className="grid gap-3">
+              <div className="grid gap-2 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4 py-3.5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {copy.riskTypes}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {record.riskTypes.map((label) => (
+                    <span key={label} className="border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
+                      {label}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="mt-3 text-sm leading-7 text-slate-700">
-                {skillDescriptionText}
+
+              <div className="grid gap-2 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4 py-3.5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {copy.surfaceLevels}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {record.surfaceLevels.map((level) => (
+                    <span key={level} className="border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
+                      {formatSurfaceLevelLabel(locale, level)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-2 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4 py-3.5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {copy.agentModels}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {displayAgentModels.map((model) => (
+                    <span key={model} className="border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
+                      {model}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </SurfaceCard>
-
-        <SurfaceCard className="grid gap-5">
-          <SectionHeading
-            title={copy.coverage}
-            description={
-              locale === "zh"
-                ? "按当前公开轨迹汇总该 skill 涉及的风险类型、等级和 agent models。"
-                : "Risk types, levels, and agent models covered by the currently public trajectories."
-            }
-          />
-
-          <div className="grid gap-4">
-            <div className="grid gap-2 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4 py-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                {copy.riskTypes}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {record.riskTypes.map((label) => (
-                  <span key={label} className="border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-2 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4 py-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                {copy.surfaceLevels}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {record.surfaceLevels.map((level) => (
-                  <span key={level} className="border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
-                    {level}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-2 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4 py-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                {copy.agentModels}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {record.agentModels.map((model) => (
-                  <span key={model} className="border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
-                    {model}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </SurfaceCard>
-      </section>
+        </div>
+      </SurfaceCard>
 
       <SurfaceCard className="grid gap-4">
         <SectionHeading

@@ -14,13 +14,12 @@ import {
 } from "@/lib/public-risk-categories";
 import { getLocale } from "@/lib/server/locale";
 import {
-  buildPublicCaseVulnerabilitySummary,
   buildPublicCaseFilterState,
-  createPublicCaseVulnerabilityItems,
+  getPublicCaseListingSnapshot,
   normalizePublicCaseLevelFilter,
   normalizePublicCaseResultFilter,
+  sortPublicCaseVulnerabilitiesForListing,
 } from "@/lib/server/public-case-vulnerabilities";
-import { listPublicCases } from "@/lib/server/report-submissions";
 
 export const dynamic = "force-dynamic";
 
@@ -80,8 +79,7 @@ export default async function VulnerabilitiesPage({
   const params = await searchParams;
   const selectedRisk = getPublicRiskCategory(firstParam(params.risk))?.slug;
   const requestedPage = parsePage(firstParam(params.page));
-  const publicCases = await listPublicCases();
-  const allVulnerabilities = createPublicCaseVulnerabilityItems(publicCases);
+  const { items: allVulnerabilities, summary } = await getPublicCaseListingSnapshot();
   const selectedResult = normalizePublicCaseResultFilter(firstParam(params.result));
   const selectedLevel = normalizePublicCaseLevelFilter(
     firstParam(params.level),
@@ -94,8 +92,7 @@ export default async function VulnerabilitiesPage({
     result: selectedResult,
   };
   const filterState = buildPublicCaseFilterState(allVulnerabilities, filters);
-  const filteredRecords = filterState.filteredItems;
-  const summary = buildPublicCaseVulnerabilitySummary(allVulnerabilities);
+  const filteredRecords = sortPublicCaseVulnerabilitiesForListing(filterState.filteredItems);
   const activeRiskCategory = getPublicRiskCategory(selectedRisk);
   const totalPages = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE));
   const currentPage = Math.min(requestedPage, totalPages);
@@ -124,15 +121,15 @@ export default async function VulnerabilitiesPage({
           title: "攻击轨迹案例",
           body: "浏览社区公开的攻击轨迹。支持多种筛选方式。",
           stats: {
-            surfaces: "攻击轨迹",
+            rounds: "攻击轨迹",
             skills: "skill 数",
             models: "模型数",
           },
           filters: {
             risk: "可先按 8 类风险分类筛选，再按 skill 名称筛选。",
             skill: "按 skill 名称筛选",
-            level: "按等级筛选",
-            result: "按结果筛选",
+            level: "按潜在漏洞等级筛选",
+            result: "按攻击结果筛选",
             apply: "筛选",
           },
           pagination: {
@@ -149,19 +146,19 @@ export default async function VulnerabilitiesPage({
           title: "Attack trace cases",
           body: "Browse public attack traces. Multiple filtering options available.",
           stats: {
-            surfaces: "Attack Traces",
+            rounds: "Attack Traces",
             skills: "Skills",
             models: "Models",
           },
           filters: {
             risk: "Start with one of the eight fixed risk categories, then filter by skill name.",
             skill: "Filter by skill name",
-            level: "Filter by level",
-            result: "Filter by result",
+            level: "Filter by potential severity",
+            result: "Filter by attack result",
             apply: "Apply",
           },
           pagination: {
-            summary: `Showing ${formatNumber(locale, pageStartNumber)}-${formatNumber(locale, pageEndNumber)} of ${formatNumber(locale, filteredRecords.length)} trajectories`,
+            summary: `Showing ${formatNumber(locale, pageStartNumber)}-${formatNumber(locale, pageEndNumber)} of ${formatNumber(locale, filteredRecords.length)} traces`,
             previous: "Previous",
             next: "Next",
             page: "Page",
@@ -215,7 +212,7 @@ export default async function VulnerabilitiesPage({
   return (
     <div className="grid gap-8">
       <section className="border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(243,248,255,0.98))] px-6 py-6 text-slate-900 shadow-[0_20px_44px_rgba(15,23,42,0.05)] sm:px-8 sm:py-7">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_minmax(0,0.52fr)_minmax(0,0.52fr)_minmax(0,0.52fr)] xl:items-stretch">
+        <div className="grid gap-4 xl:grid-cols-[minmax(18rem,1.25fr)_repeat(3,minmax(10.5rem,0.68fr))] xl:items-stretch">
           <div className="grid content-center gap-4 border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-6 py-6 sm:px-8">
             <h1 className="max-w-4xl text-3xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-[2.6rem]">
               {copy.title}
@@ -227,14 +224,14 @@ export default async function VulnerabilitiesPage({
 
           {[
             {
-              label: copy.stats.surfaces,
-              value: formatNumber(locale, summary.surfaceCount),
-              hint: locale === "zh" ? "按公开攻击轨迹条目统计" : "counted as public attack trace entries",
+              label: copy.stats.rounds,
+              value: formatNumber(locale, summary.roundCount),
+              hint: locale === "zh" ? "公开轨迹 rounds 之和" : "sum of rounds across public traces",
             },
             {
               label: copy.stats.skills,
               value: formatNumber(locale, summary.uniqueSkillCount),
-              hint: locale === "zh" ? "公开漏洞涉及的 skill" : "skills touched by public vulnerabilities",
+              hint: locale === "zh" ? "公开案例涉及的 skill" : "skills touched by public cases",
             },
             {
               label: copy.stats.models,
@@ -244,13 +241,13 @@ export default async function VulnerabilitiesPage({
           ].map((stat) => (
             <div
               key={String(stat.label)}
-              className="grid h-full grid-rows-[auto_1fr] items-center border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f6faff)] px-5 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]"
+              className="grid h-full min-w-0 grid-rows-[auto_1fr] items-center border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f6faff)] px-4 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]"
             >
-              <div className="justify-self-center border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+              <div className="min-w-0 justify-self-center whitespace-nowrap border border-slate-200 bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-normal text-slate-600">
                 {stat.label}
               </div>
-              <div className="grid place-items-center py-3">
-                <div className="text-5xl font-semibold tracking-[-0.07em] text-slate-950 sm:text-6xl">
+              <div className="grid place-items-center py-2">
+                <div className="text-[2.55rem] font-semibold leading-none tracking-normal text-slate-950 sm:text-[3.15rem]">
                   {stat.value}
                 </div>
               </div>
@@ -329,6 +326,8 @@ export default async function VulnerabilitiesPage({
                     detailHref={getPublicFindingPath({
                       slug: item.slug,
                       findingKey: item.surfaceId,
+                      reportSkillId: item.skillId,
+                      model: item.agentModel,
                     })}
                     variant="list"
                     density="compact"

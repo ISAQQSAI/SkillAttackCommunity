@@ -7,8 +7,9 @@ export default async function PublicFindingDetailPage({
 }: {
   params: Promise<{ skillId: string; slug: string; findingKey: string }>;
 }) {
-  const { slug: rawSlug, findingKey: rawFindingKey } = await params;
+  const { skillId: rawSkillId, slug: rawSlug, findingKey: rawFindingKey } = await params;
+  const skillId = decodeURIComponent(rawSkillId);
   const slug = decodeURIComponent(rawSlug);
   const findingKey = decodeURIComponent(rawFindingKey);
-  redirect(getPublicFindingPath({ slug, findingKey }));
+  redirect(getPublicFindingPath({ slug, findingKey, reportSkillId: skillId }));
 }

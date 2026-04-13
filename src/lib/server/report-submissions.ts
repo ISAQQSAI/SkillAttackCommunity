@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "crypto";
 
+import AdmZip from "adm-zip";
 import { Prisma, SubmissionStatus } from "@prisma/client";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import type { Viewer } from "@/lib/community";
@@ -23,6 +25,7 @@ const MAX_REPORT_BUNDLE_BYTES = Number(
   process.env.MAX_REPORT_BUNDLE_BYTES || 25 * 1024 * 1024
 );
 const PARSER_VERSION = "skillatlas-submission-v2";
+export const PUBLIC_CASE_LISTING_CACHE_TAG = "public-case-listing";
 
 const guestSubmitSchema = z.object({
   submitterLabel: z.string().trim().max(120).optional().or(z.literal("")),
@@ -40,6 +43,16 @@ function asJson(value: unknown) {
 
 function compactText(value: unknown) {
   return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function readJsonRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readJsonList(value: unknown) {
+  return Array.isArray(value) ? value : [];
 }
 
 function normalizeGuestSubmissionInput(input: unknown) {
@@ -580,6 +593,66 @@ export async function getAdminBundleDownload(publicId: string) {
   };
 }
 
+export async function getPublicSkillArchiveDownload(skillId: string) {
+  const cases = await prisma.publicCase.findMany({
+    orderBy: { publishedAt: "desc" },
+    select: {
+      payload: true,
+      submission: {
+        select: {
+          parsedBundle: {
+            select: {
+              storageKey: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  for (const item of cases) {
+    const payload = readJsonRecord(item.payload);
+    const findings = readJsonList(payload.findings).map((entry) => readJsonRecord(entry));
+    const matchesSkill = findings.some((finding) => compactText(finding.reportSkillId) === skillId);
+    const storageKey = item.submission?.parsedBundle?.storageKey;
+
+    if (!matchesSkill || !storageKey) {
+      continue;
+    }
+
+    try {
+      const buffer = await readSubmissionBundle(storageKey);
+      const parsed = parseReportBundle(buffer);
+      const artifact = parsed.artifacts.find(
+        (entry) =>
+          entry.kind === "skill_archive" &&
+          entry.fileName === `${skillId}/skill.zip` &&
+          entry.pathInBundle
+      );
+
+      if (!artifact?.pathInBundle) {
+        continue;
+      }
+
+      const zip = new AdmZip(buffer);
+      const archiveEntry = zip.getEntry(artifact.pathInBundle);
+      if (!archiveEntry) {
+        continue;
+      }
+
+      return {
+        fileName: `${skillId}.zip`,
+        contentType: artifact.contentType || "application/zip",
+        buffer: archiveEntry.getData(),
+      };
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 function buildDefaultPublicTitle(submission: {
   findings: Array<{ harmType: string; reportSkillId: string }>;
 }) {
@@ -740,7 +813,46 @@ export async function reviewSubmission(
     });
   });
 
+  revalidateTag(PUBLIC_CASE_LISTING_CACHE_TAG, { expire: 0 });
+
   return updated;
+}
+
+export async function listPublicCaseListingRecords() {
+  return prisma.publicCase.findMany({
+    orderBy: { publishedAt: "desc" },
+    select: {
+      slug: true,
+      title: true,
+      summary: true,
+      publishedAt: true,
+      submission: {
+        select: {
+          parsedBundle: {
+            select: {
+              findings: {
+                orderBy: { sortOrder: "asc" },
+                select: {
+                  reportSkillId: true,
+                  findingKey: true,
+                  harmType: true,
+                  vulnerabilitySurface: true,
+                  provider: true,
+                  model: true,
+                  verdict: true,
+                  reasonCode: true,
+                  harmfulPromptPreview: true,
+                  evidenceSummaryPreview: true,
+                  finalResponsePreview: true,
+                  judgeSummary: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
 }
 
 export async function listPublicCases() {
@@ -752,6 +864,22 @@ export async function listPublicCases() {
       summary: true,
       publishedAt: true,
       payload: true,
+      submission: {
+        select: {
+          parsedBundle: {
+            select: {
+              findings: {
+                select: {
+                  reportSkillId: true,
+                  findingKey: true,
+                  model: true,
+                  judgeSummary: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
 }

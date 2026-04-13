@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 
 import type { Locale } from "@/lib/i18n";
@@ -33,9 +33,26 @@ export function AuditEntryCard({
   monospace?: boolean;
 }) {
   const normalized = String(content || "").trim() || "-";
-  const lineCount = normalized.split("\n").length;
-  const canCollapse = normalized !== "-" && (normalized.length > 240 || lineCount > 4);
-  const [open, setOpen] = useState(!canCollapse);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [canCollapse, setCanCollapse] = useState(false);
+  const [open, setOpen] = useState(true);
+
+  useLayoutEffect(() => {
+    const element = contentRef.current;
+
+    if (!element || normalized === "-") {
+      setCanCollapse(false);
+      setOpen(true);
+      return;
+    }
+
+    const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight);
+    const fourLineHeight = Number.isFinite(lineHeight) ? lineHeight * 4 : 0;
+    const shouldCollapse = fourLineHeight > 0 && element.scrollHeight > fourLineHeight + 1;
+
+    setCanCollapse(shouldCollapse);
+    setOpen(!shouldCollapse);
+  }, [monospace, normalized]);
 
   function toggle() {
     if (!canCollapse) {
@@ -107,7 +124,7 @@ export function AuditEntryCard({
       </div>
 
       <div className="mt-3">
-        <div className={open ? contentClass(monospace) : previewClass(monospace)}>
+        <div ref={contentRef} className={open ? contentClass(monospace) : previewClass(monospace)}>
           {normalized}
         </div>
       </div>

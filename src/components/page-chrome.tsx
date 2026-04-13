@@ -95,7 +95,7 @@ export function PageStat({
     return (
       <div
         className={cx(
-          "grid grid-cols-[minmax(0,1fr)_6rem] bg-white text-slate-900 sm:grid-cols-[minmax(0,1fr)_7rem]",
+          "grid grid-cols-[minmax(0,1fr)_8rem] bg-white text-slate-900 sm:grid-cols-[minmax(0,1fr)_9rem]",
           className
         )}
       >

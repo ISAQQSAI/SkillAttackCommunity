@@ -17,13 +17,11 @@ import {
 import { getLocale } from "@/lib/server/locale";
 import {
   buildPublicCaseFilterState,
-  buildPublicCaseVulnerabilitySummary,
-  createPublicCaseVulnerabilityItems,
+  getPublicCaseListingSnapshot,
   normalizePublicCaseLevelFilter,
   normalizePublicCaseResultFilter,
   sortPublicCaseVulnerabilitiesBySurfaceOrdinal,
 } from "@/lib/server/public-case-vulnerabilities";
-import { listPublicCases } from "@/lib/server/report-submissions";
 
 function homeButtonClass(tone: "primary" | "secondary" = "primary") {
   if (tone === "secondary") {
@@ -52,8 +50,7 @@ export async function CommunityHomePage({
 }) {
   const locale = await getLocale();
   const selectedRisk = getPublicRiskCategory(risk)?.slug;
-  const publicCases = await listPublicCases();
-  const allVulnerabilities = createPublicCaseVulnerabilityItems(publicCases);
+  const { items: allVulnerabilities, summary } = await getPublicCaseListingSnapshot();
   const selectedResult = normalizePublicCaseResultFilter(result);
   const selectedLevel = normalizePublicCaseLevelFilter(
     level,
@@ -65,7 +62,6 @@ export async function CommunityHomePage({
     level: selectedLevel,
   });
   const filteredVulnerabilities = filterState.filteredItems;
-  const summary = buildPublicCaseVulnerabilitySummary(allVulnerabilities);
   const vulnerabilities = sortPublicCaseVulnerabilitiesBySurfaceOrdinal(filteredVulnerabilities).slice(0, 4);
   const activeRiskCategory = getPublicRiskCategory(selectedRisk);
   const hasActiveFilter = Boolean(selectedRisk || selectedResult || selectedLevel);
@@ -81,40 +77,51 @@ export async function CommunityHomePage({
     : "/vulnerabilities";
   const heroTitleClassName =
     locale === "zh"
-      ? "max-w-none text-[2.25rem] font-semibold leading-[1.04] tracking-[-0.055em] text-slate-950 sm:text-[2.45rem] lg:text-[2.6rem] xl:whitespace-nowrap"
-      : "max-w-4xl text-4xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-5xl";
+      ? "max-w-none text-[2.8rem] font-semibold leading-[1.02] tracking-[-0.06em] text-slate-950 sm:text-[3.2rem] lg:text-[3.45rem] xl:whitespace-nowrap"
+      : "max-w-5xl text-[2.7rem] font-semibold leading-[1.04] tracking-[-0.055em] text-slate-950 sm:text-[3.15rem] lg:text-[3.4rem]";
 
   return (
     <div className="grid gap-8">
-      <section className="border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,249,255,0.96))] px-6 py-7 shadow-[0_18px_40px_rgba(15,23,42,0.05)] sm:px-8 sm:py-9">
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.95fr)] xl:items-start">
-          <div className="grid gap-5">
+      <section className="border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,249,255,0.96))] px-6 py-8 shadow-[0_18px_40px_rgba(15,23,42,0.05)] sm:px-8 sm:py-10">
+        <div className="grid gap-10 xl:grid-cols-[minmax(0,1.62fr)_minmax(18rem,0.88fr)] xl:items-start">
+          <div className="grid gap-6">
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
               {locale === "zh" ? "社区驱动的技能安全" : "Community-driven Skill Security"}
             </div>
-            <div className="grid gap-4">
+            <div className="grid gap-5">
               <h1 className={heroTitleClassName}>
                 {locale === "zh"
-                  ? "共同绘制每个智能体技能的攻击轨迹"
-                  : "Trace the attack path of every agent skill together."}
+                  ? "见微知著，固若金汤。"
+                  : (
+                    <>
+                      <span className="block">Every path found,</span>
+                      <span className="block">every claw safe.</span>
+                    </>
+                  )}
               </h1>
-              <p className="max-w-3xl text-sm leading-7 text-slate-600">
+              <p className="max-w-4xl text-base leading-8 text-slate-600 sm:text-[1.05rem]">
                 {locale === "zh"
                   ? (
                     <>
-                      由社区贡献的攻击轨迹库。按攻击结果、风险等级和风险类型浏览；
+                      由社区贡献的攻击轨迹库。按攻击结果、潜在漏洞等级和风险类型浏览;
                       <br />
-                      提交你的发现，帮助更多人防范智能体风险。
+                      你发现的每条攻击路径，都是所有人的安全防线。
                     </>
                   )
-                  : "A community-contributed attack trace library. Browse by attack outcome, risk level, and risk type. Submit your findings to help others defend against agent risks."}
+                  : "A community-contributed attack trace library. Browse by attack result, potential severity, and risk type. Every attack path you discover becomes everyone's line of defense."}
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <Link href="/vulnerabilities" className={homeButtonClass("primary")}>
-                {locale === "zh" ? "浏览攻击轨迹" : "Browse attack traces"}
+            <div className="flex flex-wrap gap-3.5">
+              <Link
+                href="/vulnerabilities"
+                className={`${homeButtonClass("primary")} px-6 py-3.5 text-base`}
+              >
+                {locale === "zh" ? "浏览攻击案例" : "Browse attack cases"}
               </Link>
-              <Link href="/submit" className={homeButtonClass("secondary")}>
+              <Link
+                href="/submit"
+                className={`${homeButtonClass("secondary")} px-6 py-3.5 text-base`}
+              >
                 {locale === "zh" ? "上传漏洞报告" : "Submit a report"}
               </Link>
             </div>
@@ -124,16 +131,16 @@ export async function CommunityHomePage({
             <PageStat
               layout="row"
               className="border-0"
-              label={locale === "zh" ? "攻击轨迹" : "Attack Traces"}
-              value={formatNumber(locale, summary.surfaceCount)}
-              hint={locale === "zh" ? "按公开攻击轨迹条目统计" : "counted as public attack trace entries"}
+              label={locale === "zh" ? "攻击轨迹" : "Attack traces"}
+              value={formatNumber(locale, summary.roundCount)}
+              hint={locale === "zh" ? "已公开AGENT攻击轨迹数" : "counted as public attack rounds"}
             />
             <PageStat
               layout="row"
               className="border-0"
               label={locale === "zh" ? "skill 数" : "Skills"}
               value={formatNumber(locale, summary.uniqueSkillCount)}
-              hint={locale === "zh" ? "公开漏洞涉及的 skill" : "skills touched by public vulnerabilities"}
+              hint={locale === "zh" ? "公开案例涉及的 skill" : "skills touched by public cases"}
             />
             <PageStat
               layout="row"
@@ -149,7 +156,7 @@ export async function CommunityHomePage({
       <section className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] xl:items-start">
         <SurfaceCard className="grid gap-5 rounded-none border-slate-200 bg-white shadow-none hover:shadow-none">
           <SectionHeading
-            title={locale === "zh" ? "最新攻击轨迹" : "Latest attack traces"}
+            title={locale === "zh" ? "最新攻击案例" : "Latest attack cases"}
             description={
               activeRiskCategory
                 ? locale === "zh"
@@ -189,6 +196,8 @@ export async function CommunityHomePage({
                   detailHref={getPublicFindingPath({
                     slug: item.slug,
                     findingKey: item.surfaceId,
+                    reportSkillId: item.skillId,
+                    model: item.agentModel,
                   })}
                   variant="list"
                   density="compact"
@@ -224,7 +233,7 @@ export async function CommunityHomePage({
               {filteredVulnerabilities.length ? (
                 <div className="flex justify-center border-t border-slate-200 pt-3">
                   <Link href={viewAllHref} className={viewAllButtonClass()}>
-                    {locale === "zh" ? "查看全部轨迹" : "View all traces"}
+                    {locale === "zh" ? "查看全部案例" : "View all traces"}
                   </Link>
                 </div>
               ) : null}

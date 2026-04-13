@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { PublicCaseDetail } from "@/components/public-case-detail";
 import { PublicSurfaceDetail } from "@/components/public-surface-detail";
 import {
-  getPrimaryPublicFindingKey,
+  getPrimaryPublicFindingTarget,
   getPublicFindingPath,
 } from "@/lib/public-case-routing";
 import { getLocale } from "@/lib/server/locale";
@@ -23,13 +23,15 @@ export default async function VulnerabilityCasePage({
   const publishedCase = await getPublicCaseBySlug(slug);
 
   if (publishedCase) {
-    const firstFindingKey = getPrimaryPublicFindingKey(publishedCase.payload);
+    const firstFinding = getPrimaryPublicFindingTarget(publishedCase.payload);
 
-    if (firstFindingKey) {
+    if (firstFinding) {
       redirect(
         getPublicFindingPath({
           slug: publishedCase.slug,
-          findingKey: firstFindingKey,
+          findingKey: firstFinding.findingKey,
+          reportSkillId: firstFinding.reportSkillId,
+          model: firstFinding.model,
         })
       );
     }

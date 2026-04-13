@@ -45,6 +45,11 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
     },
   ];
   const footerLinks = [
+    {
+      href: "https://beian.miit.gov.cn/",
+      label: "京ICP备2026018243号",
+      external: true,
+    },
     { href: skillAttackLinks.arxivUrl, label: "Paper", external: true },
     { href: skillAttackLinks.repoUrl, label: "GitHub", external: true },
     {
@@ -168,7 +173,6 @@ export function AppShell({ children, viewer, locale, brand }: AppShellProps) {
             SkillAtlas © 2026
           </span>
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-center sm:gap-x-12">
-            <span>{locale === "zh" ? "脱敏公开案例" : "Sanitized public cases"}</span>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:gap-x-5">
               {footerLinks.map((item, index) => (
                 <span key={item.label} className="flex items-center gap-4">

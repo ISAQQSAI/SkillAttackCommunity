@@ -7,8 +7,6 @@ This repository now assumes a production runtime built around:
 - local persistent disk for uploaded bundles under `var/uploads`
 - one reverse proxy with HTTPS
 
-The default deployment target is still a single Linux VM, but the app is no longer file-state driven.
-
 ## What Persists Where
 
 - PostgreSQL:
@@ -18,7 +16,7 @@ The default deployment target is still a single Linux VM, but the app is no long
   - published public cases
 - Local disk:
   - uploaded `report_bundle.zip` files
-  - any future derived files under `var/uploads`
+  - derived files stored under `var/uploads`
 
 ## Recommended Server Shape
 
@@ -32,23 +30,24 @@ The default deployment target is still a single Linux VM, but the app is no long
 1. Install Docker Engine and the Docker Compose plugin.
 2. Point your DNS at the server IP.
 3. Clone this repository onto the server.
-4. Copy the production env template:
-
-```bash
-cp .env.production.example .env.production
-```
+4. Create `.env.production`.
 
 5. Edit `.env.production` and set:
 
 - `APP_DOMAIN`
-- `APP_URL`
-- `LETSENCRYPT_EMAIL`
-- `NEXTAUTH_URL`
+- `POSTGRES_DB`
+- `POSTGRES_USER`
 - `POSTGRES_PASSWORD`
 - `DATABASE_URL`
 
-Optional if you also want GitHub identity while reviewing locally:
+Optional:
 
+- `LOCAL_STORAGE_ROOT`
+- `MAX_REPORT_BUNDLE_BYTES`
+
+If you also want GitHub identity while reviewing locally or through an SSH tunnel, set:
+
+- `NEXTAUTH_URL`
 - `NEXTAUTH_SECRET`
 - `GITHUB_ID`
 - `GITHUB_SECRET`

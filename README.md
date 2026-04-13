@@ -22,7 +22,7 @@ Raw bundles, raw JSON, full trajectories, and skill archives are not exposed in 
 - Admin review
   - open the review queue
   - inspect sanitized findings and download the original bundle
-  - approve, reject, publish, and unpublish
+  - publish or reject submissions from the local-only review console
 - Public community
   - browse published skills first
   - open skill detail pages and their published case pages
@@ -56,15 +56,11 @@ Raw bundles, raw JSON, full trajectories, and skill archives are not exposed in 
 ## API Surface
 
 - `POST /api/uploads`
-- `GET /api/uploads/:id/preview`
-- `POST /api/uploads/:id/submit`
 - `GET /api/submissions/:id`
 - `GET /api/admin/reports`
 - `GET /api/admin/reports/:id`
 - `GET /api/admin/reports/:id/bundle`
 - `POST /api/admin/reports/:id/review`
-- `POST /api/admin/reports/:id/publish`
-- `POST /api/admin/reports/:id/unpublish`
 - `GET /api/public/cases`
 - `GET /api/public/cases/:slug`
 
@@ -74,12 +70,13 @@ The main production tables are:
 
 - `User`
 - `Submission`
-- `SubmissionFinding`
-- `SubmissionArtifact`
+- `ParsedBundle`
+- `ParsedBundleFinding`
+- `ParsedBundleArtifact`
 - `ReviewRecord`
 - `PublicCase`
 
-See [prisma/schema.prisma](/root/SkillAttackCommunity/prisma/schema.prisma).
+See [prisma/schema.prisma](./prisma/schema.prisma).
 
 ## Local Setup
 
@@ -89,10 +86,12 @@ See [prisma/schema.prisma](/root/SkillAttackCommunity/prisma/schema.prisma).
 npm install
 ```
 
-2. Create local env
+2. Create `.env.local`
 
-```bash
-cp .env.example .env.local
+Set at least:
+
+```dotenv
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/skillattack_community?schema=public"
 ```
 
 By default this gives you:
@@ -132,10 +131,9 @@ Admin review is intentionally local-only. Open `/review` from localhost, or use 
 
 Use:
 
-- [docker-compose.yml](/root/SkillAttackCommunity/docker-compose.yml)
-- [Dockerfile](/root/SkillAttackCommunity/Dockerfile)
-- [DEPLOY.md](/root/SkillAttackCommunity/DEPLOY.md)
-- [.env.production.example](/root/SkillAttackCommunity/.env.production.example)
+- [docker-compose.yml](./docker-compose.yml)
+- [Dockerfile](./Dockerfile)
+- [DEPLOY.md](./DEPLOY.md)
 
 The default production setup is:
 
